@@ -1091,6 +1091,273 @@ document.querySelectorAll('.tab-bar').forEach(bar => {
 
 // ── INIT ──
 showView('dashboard', document.querySelector('.nav-tab.active'));
+
+// ═══════════════════════════════════════════════════════════════
+// LIVE DATA — connects to /.netlify/functions/api
+// ═══════════════════════════════════════════════════════════════
+
+const API = '/.netlify/functions/api';
+
+// Flag emojis by team name
+const FLAGS = {
+  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿',
+  'Canada':'🇨🇦','Bosnia and Herzegovina':'🇧🇦','United States':'🇺🇸','Paraguay':'🇵🇾',
+  'Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Australia':'🇦🇺','Turkey':'🇹🇷',
+  'Brazil':'🇧🇷','Morocco':'🇲🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
+  'Ivory Coast':'🇨🇮','Ecuador':'🇪🇨','Germany':'🇩🇪','Curaçao':'🇨🇼',
+  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
+  'Iran':'🇮🇷','New Zealand':'🇳🇿','Spain':'🇪🇸','Cape Verde':'🇨🇻',
+  'Belgium':'🇧🇪','Egypt':'🇪🇬','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
+  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
+  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
+  'Portugal':'🇵🇹','Democratic Republic of the Congo':'🇨🇩',
+  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
+  'Panama':'🇵🇦','Ghana':'🇬🇭','Nigeria':'🇳🇬','Cameroon':'🇨🇲',
+  'Mali':'🇲🇱','Venezuela':'🇻🇪','Chile':'🇨🇱','Peru':'🇵🇪',
+  'Honduras':'🇭🇳','Costa Rica':'🇨🇷','Jamaica':'🇯🇲','Cuba':'🇨🇺',
+};
+const flag = name => FLAGS[name] || '🏳';
+
+// Format date "06/11/2026 13:00" → "Jun 11 · 13:00"
+function fmtDate(str) {
+  if (!str) return '';
+  const [datePart, timePart] = str.split(' ');
+  if (!datePart) return str;
+  const [m, d] = datePart.split('/');
+  const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[parseInt(m)]} ${parseInt(d)} · ${timePart || ''}`;
+}
+
+// Status badge HTML
+function statusBadge(match) {
+  if (match.status === 'live')
+    return `<span class="time">● ${match.minute || 'LIVE'}</span>`;
+  if (match.status === 'finished')
+    return '';
+  return `<span class="venue">${fmtDate(match.date)}</span>`;
+}
+
+// Score display
+function scoreDisplay(match) {
+  if (match.status === 'scheduled')
+    return 'vs';
+  return `${match.homeScore ?? 0} – ${match.awayScore ?? 0}`;
+}
+
+// ── RENDER FIXTURES ────────────────────────────────────────────
+function renderFixtures(matches) {
+  // Split: live/finished today vs upcoming
+  const today = new Date().toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g, '/');
+  const live     = matches.filter(m => m.status === 'live');
+  const finished = matches.filter(m => m.status === 'finished');
+  const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 8);
+
+  // Update stats strip
+  const totalGoals = matches.reduce((s,m) => s + (parseInt(m.homeScore)||0) + (parseInt(m.awayScore)||0), 0);
+  const played = matches.filter(m => m.status === 'finished').length;
+  document.querySelectorAll('.stat-card').forEach((card, i) => {
+    const val = card.querySelector('.val');
+    if (!val) return;
+    if (i === 0) val.textContent = played;
+    if (i === 1) val.textContent = totalGoals;
+    if (i === 2) val.textContent = played ? (totalGoals/played).toFixed(2) : '0.00';
+    if (i === 3) val.textContent = live.length || upcoming.filter(m => {
+      const d = m.date ? m.date.split(' ')[0] : '';
+      return d === today;
+    }).length || upcoming.length;
+  });
+
+  // Build match card HTML
+  const cardHTML = m => `
+    <div class="match-card">
+      <div class="match-team">
+        <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
+        <span>${m.home.name}</span>
+      </div>
+      <div class="match-score">
+        ${statusBadge(m)}
+        ${scoreDisplay(m)}
+      </div>
+      <div class="match-team right">
+        <span class="flag" style="font-size:18px">${flag(m.away.name)}</span>
+        <span>${m.away.name}</span>
+      </div>
+      <div class="match-odds">
+        <button class="odd-btn">1</button>
+        <button class="odd-btn">X</button>
+        <button class="odd-btn">2</button>
+      </div>
+    </div>`;
+
+  const display = [...live, ...finished.slice(-2), ...upcoming].slice(0, 8);
+
+  // Dashboard — top 3
+  const dashGrid = document.querySelector('#view-dashboard .matches-grid');
+  if (dashGrid) dashGrid.innerHTML = display.slice(0, 3).map(cardHTML).join('');
+
+  // Partidos — all
+  const partGrid = document.querySelector('#view-partidos .matches-grid');
+  if (partGrid) partGrid.innerHTML = display.map(cardHTML).join('');
+
+  // Ticker — update with live matches
+  if (live.length > 0) {
+    const tickerInner = document.querySelector('.ticker-inner');
+    if (tickerInner) {
+      const liveItems = live.map(m =>
+        `<div class="ticker-item">
+          <span style="font-size:14px">${flag(m.home.name)}</span>
+          <span class="team">${m.home.name.substring(0,3).toUpperCase()}</span>
+          <span class="score">${m.homeScore}-${m.awayScore}</span>
+          <span style="font-size:14px">${flag(m.away.name)}</span>
+          <span class="team">${m.away.name.substring(0,3).toUpperCase()}</span>
+          <span class="live">● LIVE ${m.minute||''}</span>
+        </div>`
+      ).join('');
+      tickerInner.innerHTML = liveItems + liveItems; // duplicate for loop
+    }
+  }
+}
+
+// ── RENDER GROUPS ──────────────────────────────────────────────
+function renderGroups(groups) {
+  if (!groups || !groups.length) return;
+  const wrap = document.querySelector('.groups-wrap');
+  if (!wrap) return;
+
+  wrap.innerHTML = groups.map(g => {
+    const teams = g.teams || [];
+    const rows = teams.map((t, i) => {
+      const teamName = typeof t.name === 'object'
+        ? (t.name.name || Object.values(t.name)[0] || '')
+        : (t.name || '');
+      const qualified = i < 2 ? 'class="qualified"' : '';
+      return `<tr ${qualified}>
+        <td><span style="font-size:14px">${flag(teamName)}</span>${teamName}</td>
+        <td>${t.played||0}</td>
+        <td>${t.won||0}</td>
+        <td>${t.drawn||0}</td>
+        <td>${t.lost||0}</td>
+        <td>${t.gd||0}</td>
+        <td class="pts-col">${t.points||0}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name">GRUPO ${g.name}</span>
+          <span style="font-size:9px;color:var(--text3)">${teams.length} equipos</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th>PTS</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }).join('');
+}
+
+// ── RENDER WEATHER ─────────────────────────────────────────────
+function renderWeather(data) {
+  // Update clima section in premium view
+  const climaModule = document.getElementById('clima');
+  if (!climaModule || !data.ok) return;
+
+  const alertsHTML = (data.alerts || []).map(a =>
+    `<div class="clima-alert ${a.type === 'ok' ? 'alert-ok' : a.type === 'hot' ? 'alert-hot' : a.type === 'wind' ? 'alert-wind' : 'alert-hot'}">
+      <span data-es="${a.es}" data-en="${a.en}">${currentLang === 'en' ? a.en : a.es}</span>
+    </div>`
+  ).join('');
+
+  const forecastHTML = (data.forecast || []).slice(0,3).map((f,i) => {
+    const labels = ['Hoy','Mañana','Pasado'];
+    return `<div class="clima-card">
+      <div class="clima-venue">${labels[i]} · ${data.venue}</div>
+      <div class="clima-temp">${f.tempMaxC}°<span>C / ${Math.round(f.tempMaxC*9/5+32)}°F</span></div>
+      <div class="clima-row"><span>💧 ${data.current.humidity}%</span><span>💨 ${data.current.windKmh}km/h</span></div>
+      ${alertsHTML}
+    </div>`;
+  }).join('');
+
+  // Replace blurred content in clima module
+  const blurred = climaModule.querySelector('.blurred-content');
+  if (blurred) blurred.innerHTML = `<div class="clima-grid">${forecastHTML}</div>`;
+}
+
+// ── UPDATE NEWS SECTION ─────────────────────────────────────────
+function updateNewsDate() {
+  // Just update the "updated" timestamp on news
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+  document.querySelectorAll('.tag-live').forEach(el => {
+    if (el.closest('#view-noticias')) {
+      el.textContent = `● ${timeStr}`;
+    }
+  });
+}
+
+// ── LOADING STATE ──────────────────────────────────────────────
+function setLoading(selector, msgES, msgEN) {
+  const el = document.querySelector(selector);
+  if (el) el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">
+    <span data-es="${msgES}" data-en="${msgEN}">${currentLang==='en'?msgEN:msgES}</span>
+  </div>`;
+}
+
+// ── BOOT: FETCH ALL DATA ───────────────────────────────────────
+async function loadLiveData() {
+  // 1. Fixtures
+  setLoading('#view-dashboard .matches-grid',
+    'Cargando partidos...', 'Loading matches...');
+  setLoading('#view-partidos .matches-grid',
+    'Cargando partidos...', 'Loading matches...');
+  try {
+    const res = await fetch(`${API}?action=fixtures`);
+    const data = await res.json();
+    if (data.ok && data.matches) renderFixtures(data.matches);
+  } catch(e) {
+    console.error('fixtures error:', e);
+  }
+
+  // 2. Groups
+  setLoading('.groups-wrap', 'Cargando grupos...', 'Loading groups...');
+  try {
+    const res = await fetch(`${API}?action=groups`);
+    const data = await res.json();
+    if (data.ok && data.groups) renderGroups(data.groups);
+  } catch(e) {
+    console.error('groups error:', e);
+  }
+
+  // 3. Weather — load first venue (dallas) by default
+  try {
+    const res = await fetch(`${API}?action=weather&venue=dallas`);
+    const data = await res.json();
+    if (data.ok) renderWeather(data);
+  } catch(e) {
+    console.error('weather error:', e);
+  }
+
+  // 4. Update news timestamp
+  updateNewsDate();
+
+  // Apply current language to any new elements
+  applyLang();
+}
+
+// Boot after DOM ready
+loadLiveData();
+
+// Auto-refresh every 60 seconds (for live scores)
+setInterval(async () => {
+  try {
+    const res = await fetch(`${API}?action=fixtures`);
+    const data = await res.json();
+    if (data.ok && data.matches) renderFixtures(data.matches);
+  } catch(e) {}
+}, 60000);
 </script>
 </body>
 </html>
