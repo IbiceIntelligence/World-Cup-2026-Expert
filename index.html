@@ -1080,14 +1080,67 @@ function applyLang() {
 }
 
 // ── TAB BAR (match day filter) ──
+let allMatchesCache = [];
+
 document.querySelectorAll('.tab-bar').forEach(bar => {
   bar.querySelectorAll('.tab-item').forEach(tab => {
     tab.addEventListener('click', () => {
       bar.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
+      filterMatchesByTab(tab);
     });
   });
 });
+
+function filterMatchesByTab(tab) {
+  if (!allMatchesCache.length) return;
+  const label = (tab.getAttribute('data-es') || tab.textContent.trim()).toLowerCase();
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const todayISO    = toISO(now);
+  const tomorrowISO = toISO(new Date(now.getTime()+86400000));
+
+  function matchISO(m) {
+    if (!m.date) return '';
+    const parts = m.date.split(' ')[0].split('/'); // MM/DD/YYYY
+    return `${parts[2]}-${pad(parts[0])}-${pad(parts[1])}`;
+  }
+
+  let filtered;
+  let headerLabel;
+  if (label === 'hoy' || label === 'today') {
+    filtered = allMatchesCache.filter(m => matchISO(m) === todayISO);
+    const opts = {weekday:'short',month:'short',day:'numeric'};
+    headerLabel = now.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase() + ' — ' + (currentLang==='en'?'MATCHDAY':'JORNADA') + ' 1';
+  } else if (label === 'mañana' || label === 'tomorrow') {
+    filtered = allMatchesCache.filter(m => matchISO(m) === tomorrowISO);
+    const tom = new Date(now.getTime()+86400000);
+    const opts = {weekday:'short',month:'short',day:'numeric'};
+    headerLabel = tom.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase();
+  } else {
+    // Semana / Week — next 7 days
+    filtered = allMatchesCache.filter(m => {
+      const d = matchISO(m);
+      return d >= todayISO && d <= toISO(new Date(now.getTime()+7*86400000));
+    });
+    headerLabel = currentLang==='en' ? 'NEXT 7 DAYS' : 'PRÓXIMOS 7 DÍAS';
+  }
+
+  // Update date header
+  const hdr = document.querySelector('#view-partidos .section-hdr + [style*="font-size:10px"], #view-partidos [style*="font-size:10px;color:var(--text3"]');
+  if (hdr) hdr.textContent = headerLabel;
+
+  const partGrid = document.querySelector('#view-partidos .matches-grid');
+  if (!partGrid) return;
+  if (!filtered.length) {
+    partGrid.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">
+      ${currentLang==='en'?'No matches for this period.':'No hay partidos para este período.'}
+    </div>`;
+    return;
+  }
+  partGrid.innerHTML = filtered.map(cardHTMLWithClick).join('');
+}
 
 // ── INIT ──
 showView('dashboard', document.querySelector('.nav-tab.active'));
@@ -1169,7 +1222,7 @@ function renderFixtures(matches) {
 
   // Build match card HTML
   const cardHTML = m => `
-    <div class="match-card">
+    <div class="match-card" onclick="openDrawer('${m.home.name.replace(/'/g,"\\'")}','${m.away.name.replace(/'/g,"\\'")}')">
       <div class="match-team">
         <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
         <span>${m.home.name}</span>
@@ -1183,9 +1236,9 @@ function renderFixtures(matches) {
         <span>${m.away.name}</span>
       </div>
       <div class="match-odds">
-        <button class="odd-btn">1</button>
-        <button class="odd-btn">X</button>
-        <button class="odd-btn">2</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">1</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">X</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">2</button>
       </div>
     </div>`;
 
@@ -1316,7 +1369,7 @@ async function loadLiveData() {
   try {
     const res = await fetch(`${API}?action=fixtures`);
     const data = await res.json();
-    if (data.ok && data.matches) renderFixtures(data.matches);
+    if (data.ok && data.matches) { allMatchesCache = data.matches; renderFixtures(data.matches); }
   } catch(e) {
     console.error('fixtures error:', e);
   }
@@ -1347,6 +1400,7 @@ async function loadLiveData() {
   applyLang();
 }
 
+
 // Boot after DOM ready
 loadLiveData();
 
@@ -1355,9 +1409,377 @@ setInterval(async () => {
   try {
     const res = await fetch(`${API}?action=fixtures`);
     const data = await res.json();
-    if (data.ok && data.matches) renderFixtures(data.matches);
+    if (data.ok && data.matches) { allMatchesCache = data.matches; renderFixtures(data.matches); }
   } catch(e) {}
 }, 60000);
+
+// MATCH ANALYSIS DRAWER
+// ═══════════════════════════════════════════════════════════════
+
+// Inject drawer HTML + styles once
+(function injectDrawer() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      z-index: 200; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(480px, 100vw);
+      background: #111111;
+      border-left: 0.5px solid rgba(212,175,55,0.2);
+      z-index: 201; transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 16px 20px 14px;
+      border-bottom: 0.5px solid rgba(212,175,55,0.12);
+      background: #181818;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .drawer-matchup {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 15px; font-weight: 600; color: #f0ece0;
+    }
+    .drawer-vs {
+      font-size: 11px; color: #D4AF37;
+      font-family: 'Space Mono', monospace;
+    }
+    .drawer-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: #222; border: 0.5px solid rgba(212,175,55,0.15);
+      color: #9a9488; font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.12s; flex-shrink: 0;
+    }
+    .drawer-close:hover { color: #f0ece0; border-color: rgba(212,175,55,0.3); }
+    .drawer-body {
+      flex: 1; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .drawer-loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; height: 100%;
+      color: #5a5650; font-size: 13px;
+    }
+    .drawer-spinner {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid rgba(212,175,55,0.15);
+      border-top-color: #D4AF37;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .drawer-section {
+      background: #181818; border: 0.5px solid rgba(212,175,55,0.1);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .drawer-section-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #5a5650; margin-bottom: 10px;
+    }
+    .drawer-summary {
+      font-size: 13px; color: #9a9488; line-height: 1.65;
+    }
+    .pick-row {
+      display: grid; grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 10px; padding: 8px 0;
+      border-bottom: 0.5px solid rgba(212,175,55,0.08);
+    }
+    .pick-row:last-child { border-bottom: none; }
+    .pick-market { font-size: 11px; color: #5a5650; margin-bottom: 2px; }
+    .pick-rec { font-size: 13px; font-weight: 600; color: #f0ece0; }
+    .pick-odds {
+      font-family: 'Space Mono', monospace; font-size: 12px;
+      color: #D4AF37; background: rgba(212,175,55,0.08);
+      padding: 3px 8px; border-radius: 4px; white-space: nowrap;
+    }
+    .pick-ev {
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; white-space: nowrap;
+    }
+    .ev-pos { background: rgba(82,201,122,0.1); color: #52c97a; }
+    .ev-neg { background: rgba(224,82,82,0.1); color: #e05252; }
+    .conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .conf-bar-bg {
+      flex: 1; height: 3px; background: rgba(212,175,55,0.1); border-radius: 2px;
+    }
+    .conf-bar-fill {
+      height: 100%; border-radius: 2px; background: #D4AF37;
+      transition: width 0.6s ease;
+    }
+    .conf-label { font-size: 10px; color: #5a5650; white-space: nowrap; }
+    .factor-item {
+      font-size: 12px; color: #9a9488; padding: 5px 0;
+      border-bottom: 0.5px solid rgba(212,175,55,0.06);
+      display: flex; align-items: flex-start; gap: 7px; line-height: 1.5;
+    }
+    .factor-item:last-child { border-bottom: none; }
+    .factor-dot { color: #D4AF37; flex-shrink: 0; margin-top: 2px; }
+    .prediction-box {
+      background: rgba(212,175,55,0.06); border: 0.5px solid rgba(212,175,55,0.2);
+      border-radius: 8px; padding: 12px 14px; text-align: center;
+    }
+    .prediction-score {
+      font-family: 'Space Mono', monospace; font-size: 22px;
+      font-weight: 700; color: #D4AF37; margin-bottom: 4px;
+    }
+    .prediction-note { font-size: 11px; color: #5a5650; }
+    .drawer-paywall {
+      background: linear-gradient(135deg, #181818, rgba(212,175,55,0.04));
+      border: 0.5px solid rgba(212,175,55,0.2);
+      border-radius: 10px; padding: 24px 20px;
+      text-align: center; display: flex; flex-direction: column;
+      align-items: center; gap: 12px;
+    }
+    .drawer-paywall-icon { font-size: 28px; }
+    .drawer-paywall-title { font-size: 15px; font-weight: 700; color: #f0ece0; }
+    .drawer-paywall-sub { font-size: 12px; color: #9a9488; line-height: 1.5; max-width: 280px; }
+    .drawer-upgrade-btn {
+      background: #D4AF37; color: #0a0a0a; border: none;
+      padding: 11px 28px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .drawer-upgrade-btn:hover { opacity: 0.88; }
+  `;
+  document.head.appendChild(style);
+
+  const html = `
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="matchDrawer">
+      <div class="drawer-header">
+        <div class="drawer-matchup" id="drawerMatchup">
+          <span id="drawerHome"></span>
+          <span class="drawer-vs">VS</span>
+          <span id="drawerAway"></span>
+        </div>
+        <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      </div>
+      <div class="drawer-body" id="drawerBody">
+        <div class="drawer-loading">
+          <div class="drawer-spinner"></div>
+          <span id="drawerLoadingMsg">Analizando partido...</span>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+})();
+
+// Open / close
+function openDrawer(home, away) {
+  const overlay = document.getElementById('drawerOverlay');
+  const drawer  = document.getElementById('matchDrawer');
+  const loadMsg = document.getElementById('drawerLoadingMsg');
+
+  document.getElementById('drawerHome').textContent = `${flag(home)} ${home}`;
+  document.getElementById('drawerAway').textContent = `${flag(away)} ${away}`;
+
+  loadMsg.textContent = currentLang === 'en'
+    ? `Analyzing ${home} vs ${away}...`
+    : `Analizando ${home} vs ${away}...`;
+
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drawer-loading">
+      <div class="drawer-spinner"></div>
+      <span>${loadMsg.textContent}</span>
+    </div>`;
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  fetchAnalysis(home, away);
+}
+
+function closeDrawer() {
+  document.getElementById('drawerOverlay').classList.remove('open');
+  document.getElementById('matchDrawer').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Fetch analysis from API
+async function fetchAnalysis(home, away) {
+  const body = document.getElementById('drawerBody');
+  try {
+    const res  = await fetch(`${API}?action=analyze&home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&lang=${currentLang}`);
+    const data = await res.json();
+    renderAnalysis(body, home, away, data);
+  } catch(e) {
+    body.innerHTML = `
+      <div class="drawer-loading">
+        <span style="color:#e05252">Error al cargar el análisis</span>
+        <button onclick="fetchAnalysis('${home}','${away}')"
+          style="background:var(--gold);color:#0a0a0a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">
+          Reintentar
+        </button>
+      </div>`;
+  }
+}
+
+// Render full analysis
+function renderAnalysis(body, home, away, data) {
+  // If API returned an error object (not our analysis shape), show paywall
+  if (data.error || (!data.summary && !data.picks)) {
+    body.innerHTML = paywallHTML(home, away);
+    return;
+  }
+
+  const picks = (data.picks || []).map(p => {
+    const evNum = parseFloat(p.ev) || 0;
+    const evClass = evNum >= 0 ? 'ev-pos' : 'ev-neg';
+    const evLabel = evNum >= 0 ? `+${evNum.toFixed(1)}% EV` : `${evNum.toFixed(1)}% EV`;
+    const conf = Math.min(100, Math.max(0, parseInt(p.confidence) || 65));
+    return `
+      <div class="pick-row">
+        <div>
+          <div class="pick-market">${p.market || ''}</div>
+          <div class="pick-rec">${p.recommendation || ''}</div>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar-bg"><div class="conf-bar-fill" style="width:${conf}%"></div></div>
+            <span class="conf-label">${conf}% ${currentLang==='en'?'conf.':'conf.'}</span>
+          </div>
+        </div>
+        <span class="pick-odds">${p.odds || ''}</span>
+        <span class="pick-ev ${evClass}">${evLabel}</span>
+      </div>`;
+  }).join('');
+
+  const factors = (data.keyFactors || []).map(f =>
+    `<div class="factor-item"><span class="factor-dot">▸</span>${f}</div>`
+  ).join('');
+
+  const pred = data.prediction || {};
+  const predScore = pred.score || pred.result || (currentLang==='en' ? 'See analysis' : 'Ver análisis');
+
+  body.innerHTML = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'ANALYSIS':'ANÁLISIS'}</div>
+      <div class="drawer-summary">${data.summary || ''}</div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'TOP PICKS · EXPECTED VALUE':'TOP PICKS · VALOR ESPERADO'}</div>
+      ${picks || `<div class="drawer-summary">${currentLang==='en'?'No picks available':'Sin picks disponibles'}</div>`}
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'KEY FACTORS':'FACTORES CLAVE'}</div>
+      ${factors || `<div class="drawer-summary">—</div>`}
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'PREDICTION':'PREDICCIÓN'}</div>
+      <div class="prediction-box">
+        <div class="prediction-score">${predScore}</div>
+        <div class="prediction-note">${pred.note || pred.confidence || ''}</div>
+      </div>
+    </div>
+
+    <div style="font-size:10px;color:#3a3630;text-align:center;padding:8px 0;line-height:1.6">
+      ${currentLang==='en'
+        ? 'AI analysis for informational purposes only. Sports betting involves financial risk.'
+        : 'Análisis AI con fines informativos. Las apuestas deportivas conllevan riesgo financiero.'}
+    </div>`;
+}
+
+function paywallHTML(home, away) {
+  return `
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div class="drawer-paywall">
+        <div class="drawer-paywall-icon">🔒</div>
+        <div class="drawer-paywall-title">
+          ${currentLang==='en'?'Premium Analysis':'Análisis Premium'}
+        </div>
+        <div class="drawer-paywall-sub">
+          ${currentLang==='en'
+            ? `Full AI breakdown of ${home} vs ${away} — picks, EV, key factors and score prediction.`
+            : `Análisis AI completo de ${home} vs ${away} — picks, EV, factores clave y predicción de marcador.`}
+        </div>
+        <button class="drawer-upgrade-btn" onclick="closeDrawer();showView('premium',null);setTimeout(()=>document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'}),80)">
+          ${currentLang==='en'?'Upgrade — $9/mo':'Upgrade — $9/mes'}
+        </button>
+        <span style="font-size:10px;color:#3a3630">
+          ${currentLang==='en'?'Cancel anytime':'Cancela cuando quieras'}
+        </span>
+      </div>
+    </div>`;
+}
+
+// Patch cardHTML to add onclick — override the one in renderFixtures
+const _origCardHTML = window._cardHTML;
+function cardHTMLWithClick(m) {
+  return `
+    <div class="match-card" onclick="openDrawer('${m.home.name.replace(/'/g,"\\'")}','${m.away.name.replace(/'/g,"\\'")}')">
+      <div class="match-team">
+        <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
+        <span>${m.home.name}</span>
+      </div>
+      <div class="match-score">
+        ${statusBadge(m)}
+        ${scoreDisplay(m)}
+      </div>
+      <div class="match-team right">
+        <span class="flag" style="font-size:18px">${flag(m.away.name)}</span>
+        <span>${m.away.name}</span>
+      </div>
+      <div class="match-odds">
+        <button class="odd-btn" onclick="event.stopPropagation()">1</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">X</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">2</button>
+      </div>
+    </div>`;
+}
+
+// Patch renderFixtures to use click-enabled cards
+const _origRenderFixtures = renderFixtures;
+function renderFixtures(matches) {
+  const today = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  const live     = matches.filter(m => m.status === 'live');
+  const finished = matches.filter(m => m.status === 'finished');
+  const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 8);
+
+  const totalGoals = matches.reduce((s,m) => s+(parseInt(m.homeScore)||0)+(parseInt(m.awayScore)||0),0);
+  const played = matches.filter(m => m.status==='finished').length;
+  document.querySelectorAll('.stat-card').forEach((card,i) => {
+    const val = card.querySelector('.val');
+    if (!val) return;
+    if (i===0) val.textContent = played;
+    if (i===1) val.textContent = totalGoals;
+    if (i===2) val.textContent = played?(totalGoals/played).toFixed(2):'0.00';
+    if (i===3) val.textContent = live.length || upcoming.slice(0,6).length;
+  });
+
+  const display = [...live,...finished.slice(-2),...upcoming].slice(0,8);
+
+  const dashGrid = document.querySelector('#view-dashboard .matches-grid');
+  if (dashGrid) dashGrid.innerHTML = display.slice(0,3).map(cardHTMLWithClick).join('');
+
+  const partGrid = document.querySelector('#view-partidos .matches-grid');
+  if (partGrid) partGrid.innerHTML = display.map(cardHTMLWithClick).join('');
+
+  if (live.length > 0) {
+    const tickerInner = document.querySelector('.ticker-inner');
+    if (tickerInner) {
+      const liveItems = live.map(m =>
+        `<div class="ticker-item">
+          <span style="font-size:14px">${flag(m.home.name)}</span>
+          <span class="team">${m.home.name.substring(0,3).toUpperCase()}</span>
+          <span class="score">${m.homeScore}-${m.awayScore}</span>
+          <span style="font-size:14px">${flag(m.away.name)}</span>
+          <span class="team">${m.away.name.substring(0,3).toUpperCase()}</span>
+          <span class="live">● LIVE ${m.minute||''}</span>
+        </div>`
+      ).join('');
+      tickerInner.innerHTML = liveItems + liveItems;
+    }
+  }
+}
 </script>
 </body>
 </html>
