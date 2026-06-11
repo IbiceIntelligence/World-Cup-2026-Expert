@@ -429,10 +429,10 @@ main { padding: 24px; }
       <h2><span data-es="Resumen del torneo" data-en="Tournament overview">Resumen del torneo</span> <span class="tag-live" data-es="en vivo" data-en="live">en vivo</span></h2>
     </div>
     <div class="stats-strip">
-      <div class="stat-card"><div class="val mono">14</div><div class="lbl" data-es="Partidos jugados" data-en="Matches played">Partidos jugados</div></div>
-      <div class="stat-card"><div class="val mono">38</div><div class="lbl" data-es="Goles anotados" data-en="Goals scored">Goles anotados</div></div>
-      <div class="stat-card"><div class="val mono">2.71</div><div class="lbl" data-es="Promedio goles" data-en="Avg goals">Promedio goles</div></div>
-      <div class="stat-card"><div class="val mono">6</div><div class="lbl" data-es="Partidos hoy" data-en="Matches today">Partidos hoy</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Partidos jugados" data-en="Matches played">Partidos jugados</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Goles anotados" data-en="Goals scored">Goles anotados</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Promedio goles" data-en="Avg goals">Promedio goles</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Partidos hoy" data-en="Matches today">Partidos hoy</div></div>
     </div>
   </div>
 
@@ -1929,7 +1929,8 @@ function renderFixtures(matches) {
   const padL2 = n => String(n).padStart(2,'0');
   const todayL2 = `${padL2(nowL2.getMonth()+1)}/${padL2(nowL2.getDate())}/${nowL2.getFullYear()}`;
   const displayToday2 = matches.filter(m => m.date && m.date.startsWith(todayL2));
-  const display = displayToday2.length ? displayToday2 : [...live,...finished.slice(-2),...upcoming].slice(0,8);
+  // Only show today's matches — never mix with other days
+  const display = displayToday2;
 
   const dashGrid = document.querySelector('#view-dashboard .matches-grid');
   if (dashGrid) dashGrid.innerHTML = display.slice(0,3).map(cardHTMLWithClick).join('');
