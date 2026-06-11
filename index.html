@@ -1418,6 +1418,78 @@ function setLoading(selector, msgES, msgEN) {
 }
 
 // ── BOOT: FETCH ALL DATA ───────────────────────────────────────
+
+// ── UPDATE NEWS FROM LIVE FIXTURES ──────────────────────────
+function updateNewsFromFixtures(matches) {
+  const mexRSA = matches.find(m =>
+    (m.home.name === 'Mexico' && m.away.name === 'South Africa') ||
+    (m.away.name === 'Mexico' && m.home.name === 'South Africa')
+  );
+  if (!mexRSA || mexRSA.status !== 'finished') return;
+  const isMexHome = mexRSA.home.name === 'Mexico';
+  const hs = isMexHome ? mexRSA.homeScore : mexRSA.awayScore;
+  const as = isMexHome ? mexRSA.awayScore : mexRSA.homeScore;
+  const score = hs + '-' + as;
+  const el = document.getElementById('news-mex-rsa');
+  if (!el) return;
+  const esText = 'México ' + score + ' Sudáfrica — resultado final del partido inaugural';
+  const enText = 'Mexico ' + score + ' South Africa — final result of the opener';
+  el.setAttribute('data-es', esText);
+  el.setAttribute('data-en', enText);
+  el.textContent = currentLang === 'en' ? enText : esText;
+}
+
+// ── CALCULATE STANDINGS FROM FIXTURES (fallback when API is stale) ──
+function calcStandingsFromFixtures(matches) {
+  // Build standings map: group → { teamName → stats }
+  const groups = {};
+  const finished = matches.filter(m => m.status === 'finished');
+  finished.forEach(m => {
+    const grp = m.group || 'X';
+    if (!groups[grp]) groups[grp] = {};
+    const home = m.home.name;
+    const away = m.away.name;
+    const hs = parseInt(m.homeScore) || 0;
+    const as = parseInt(m.awayScore) || 0;
+    // Init teams
+    if (!groups[grp][home]) groups[grp][home] = {name:home,played:0,won:0,drawn:0,lost:0,gf:0,ga:0,gd:0,points:0};
+    if (!groups[grp][away]) groups[grp][away] = {name:away,played:0,won:0,drawn:0,lost:0,gf:0,ga:0,gd:0,points:0};
+    // Update home
+    groups[grp][home].played++;
+    groups[grp][home].gf += hs;
+    groups[grp][home].ga += as;
+    groups[grp][home].gd += (hs - as);
+    if (hs > as)      { groups[grp][home].won++;   groups[grp][home].points += 3; }
+    else if (hs === as){ groups[grp][home].drawn++; groups[grp][home].points += 1; }
+    else               { groups[grp][home].lost++; }
+    // Update away
+    groups[grp][away].played++;
+    groups[grp][away].gf += as;
+    groups[grp][away].ga += hs;
+    groups[grp][away].gd += (as - hs);
+    if (as > hs)      { groups[grp][away].won++;   groups[grp][away].points += 3; }
+    else if (as === hs){ groups[grp][away].drawn++; groups[grp][away].points += 1; }
+    else               { groups[grp][away].lost++; }
+  });
+  return groups;
+}
+
+// ── MERGE API GROUPS WITH CALCULATED STANDINGS ──────────────
+function mergeGroupsWithFixtures(apiGroups, calcGroups) {
+  return apiGroups.map(g => {
+    const calc = calcGroups[g.name] || {};
+    const teams = g.teams.map(t => {
+      const live = calc[t.name];
+      if (live) {
+        return { ...t, played: live.played, won: live.won, drawn: live.drawn,
+                 lost: live.lost, gf: live.gf, ga: live.ga, gd: live.gd, points: live.points };
+      }
+      return t;
+    }).sort((a,b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
+    return { ...g, teams };
+  });
+}
+
 async function loadLiveData() {
   // 1. Fixtures
   setLoading('#view-dashboard .matches-grid',
@@ -1436,12 +1508,18 @@ async function loadLiveData() {
     console.error('fixtures error:', e);
   }
 
-  // 2. Groups
+  // 2. Groups — merge API standings with our own calculation from fixtures
   setLoading('.groups-wrap', 'Cargando grupos...', 'Loading groups...');
   try {
     const res = await fetch(`${API}?action=groups`);
     const data = await res.json();
-    if (data.ok && data.groups) renderGroups(data.groups);
+    if (data.ok && data.groups) {
+      // Calculate our own standings from finished fixtures
+      const calcGroups = calcStandingsFromFixtures(allMatchesCache);
+      // Merge: our calculations override stale API data
+      const merged = mergeGroupsWithFixtures(data.groups, calcGroups);
+      renderGroups(merged);
+    }
   } catch(e) {
     console.error('groups error:', e);
   }
