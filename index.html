@@ -246,6 +246,54 @@ main { padding: 24px; }
 
 /* i18n hidden */
 [data-en], [data-es] {}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  nav { padding: 0 12px; height: 52px; gap: 8px; }
+  .nav-tabs { display: none; }
+  .nav-right { gap: 6px; }
+  .badge-free { display: none; }
+  .btn-upgrade { padding: 6px 10px; font-size: 10px; }
+  nav > div:first-child span:last-child { display: none; } /* hide subtitle */
+  nav > div:first-child > div:first-child { width: 36px; height: 36px; }
+
+  .app-shell { grid-template-columns: 1fr; }
+  aside {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    position: static; height: auto; overflow: visible;
+    padding: 8px 0; border-right: none;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .aside-section { padding: 0; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; }
+  .aside-label { display: none; }
+  .aside-divider { display: none; }
+  .aside-item {
+    padding: 6px 10px; border-left: none; border-radius: 6px;
+    font-size: 11px; border-bottom: 2px solid transparent;
+  }
+  .aside-item.active { border-left: none; border-bottom-color: var(--gold); background: var(--gold-pale); }
+  .aside-item .premium-dot { display: none; }
+  .aside-item .lock-icon { display: none; }
+
+  main { padding: 12px; }
+  .stats-strip { grid-template-columns: 1fr 1fr; }
+  .match-card { grid-template-columns: 1fr auto 1fr; gap: 6px; padding: 10px 12px; }
+  .match-odds { display: none; }
+  .match-team { font-size: 12px; }
+  .groups-wrap { grid-template-columns: 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; }
+  .ref-card { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .clima-grid { grid-template-columns: 1fr; }
+  .paywall-plans { flex-direction: column; }
+  .drawer { width: 100vw; }
+  .pick-row { grid-template-columns: 1fr auto; }
+  .pick-ev { display: none; }
+}
+@media (max-width: 480px) {
+  nav > div:first-child span:first-child { font-size: 14px; letter-spacing: 0.08em; }
+  .stats-strip { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-card .val { font-size: 20px; }
+}
 </style>
 </head>
 <body>
@@ -620,7 +668,7 @@ main { padding: 24px; }
       <div class="news-card">
         <span class="news-tag nt-result" data-es="Resultado" data-en="Result">Resultado</span>
         <div class="news-body">
-          <div class="news-title" data-es="México aplasta 3-0 a Sudáfrica en el partido inaugural del Azteca" data-en="Mexico crushes South Africa 3-0 in Azteca opener">México aplasta 3-0 a Sudáfrica en el partido inaugural del Azteca</div>
+          <div class="news-title" id="news-mex-rsa" data-es="México derrota a Sudáfrica en el partido inaugural del Azteca" data-en="Mexico defeats South Africa in Azteca opener">México derrota a Sudáfrica en el partido inaugural del Azteca</div>
           <div class="news-meta">Récord · <span data-es="Hace 3 horas" data-en="3 hours ago">Hace 3 horas</span></div>
         </div>
       </div>
@@ -1098,14 +1146,18 @@ function filterMatchesByTab(tab) {
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const todayISO    = toISO(now);
-  const tomorrowISO = toISO(new Date(now.getTime()+86400000));
+  // todayISO and tomorrowISO defined in matchISO block above
 
   function matchISO(m) {
     if (!m.date) return '';
     const parts = m.date.split(' ')[0].split('/'); // MM/DD/YYYY
-    return `${parts[2]}-${pad(parts[0])}-${pad(parts[1])}`;
+    if (parts.length < 3) return '';
+    return `${parts[2]}-${pad(String(parts[0]))}-${pad(String(parts[1]))}`;
   }
+  // Use local date string to avoid UTC offset shifting the day
+  const localToISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const todayISO    = localToISO(now);
+  const tomorrowISO = localToISO(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
 
   let filtered;
   let headerLabel;
@@ -1205,24 +1257,25 @@ function renderFixtures(matches) {
   const finished = matches.filter(m => m.status === 'finished');
   const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 8);
 
-  // Update stats strip
+  // Update stats strip — use local date for "today" count
   const totalGoals = matches.reduce((s,m) => s + (parseInt(m.homeScore)||0) + (parseInt(m.awayScore)||0), 0);
   const played = matches.filter(m => m.status === 'finished').length;
+  const nowLocal = new Date();
+  const padL = n => String(n).padStart(2,'0');
+  const todayLocal = `${padL(nowLocal.getMonth()+1)}/${padL(nowLocal.getDate())}/${nowLocal.getFullYear()}`;
+  const todayMatches = matches.filter(m => m.date && m.date.startsWith(todayLocal));
   document.querySelectorAll('.stat-card').forEach((card, i) => {
     const val = card.querySelector('.val');
     if (!val) return;
     if (i === 0) val.textContent = played;
     if (i === 1) val.textContent = totalGoals;
     if (i === 2) val.textContent = played ? (totalGoals/played).toFixed(2) : '0.00';
-    if (i === 3) val.textContent = live.length || upcoming.filter(m => {
-      const d = m.date ? m.date.split(' ')[0] : '';
-      return d === today;
-    }).length || upcoming.length;
+    if (i === 3) val.textContent = todayMatches.length;
   });
 
   // Build match card HTML
   const cardHTML = m => `
-    <div class="match-card" onclick="openDrawer('${m.home.name.replace(/'/g,"\\'")}','${m.away.name.replace(/'/g,"\\'")}')">
+    <div class="match-card" data-home="${m.home.name.replace(/"/g,'&quot;')}" data-away="${m.away.name.replace(/"/g,'&quot;')}" onclick="openDrawerFromCard(this)">
       <div class="match-team">
         <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
         <span>${m.home.name}</span>
@@ -1242,15 +1295,20 @@ function renderFixtures(matches) {
       </div>
     </div>`;
 
-  const display = [...live, ...finished.slice(-2), ...upcoming].slice(0, 8);
+  // Today's matches only for dashboard and default partidos view
+  const todayAll = matches.filter(m => m.date && m.date.startsWith(todayLocal));
+  const todayLive     = todayAll.filter(m => m.status === 'live');
+  const todayFinished = todayAll.filter(m => m.status === 'finished');
+  const todayUpcoming = todayAll.filter(m => m.status === 'scheduled');
+  const displayToday  = [...todayLive, ...todayFinished, ...todayUpcoming];
 
-  // Dashboard — top 3
+  // Dashboard — top 3 today
   const dashGrid = document.querySelector('#view-dashboard .matches-grid');
-  if (dashGrid) dashGrid.innerHTML = display.slice(0, 3).map(cardHTML).join('');
+  if (dashGrid) dashGrid.innerHTML = displayToday.slice(0, 3).map(cardHTML).join('');
 
-  // Partidos — all
+  // Partidos — all today (tab filter can change this)
   const partGrid = document.querySelector('#view-partidos .matches-grid');
-  if (partGrid) partGrid.innerHTML = display.map(cardHTML).join('');
+  if (partGrid) partGrid.innerHTML = displayToday.map(cardHTML).join('');
 
   // Ticker — update with live matches
   if (live.length > 0) {
@@ -1360,7 +1418,7 @@ function setLoading(selector, msgES, msgEN) {
 }
 
 // ── BOOT: FETCH ALL DATA ───────────────────────────────────────
-async function loadLiveData() {
+loadLiveData() {
   // 1. Fixtures
   setLoading('#view-dashboard .matches-grid',
     'Cargando partidos...', 'Loading matches...');
@@ -1369,7 +1427,11 @@ async function loadLiveData() {
   try {
     const res = await fetch(`${API}?action=fixtures`);
     const data = await res.json();
-    if (data.ok && data.matches) { allMatchesCache = data.matches; renderFixtures(data.matches); }
+    if (data.ok && data.matches) {
+      allMatchesCache = data.matches;
+      renderFixtures(data.matches);
+      updateNewsFromFixtures(data.matches);
+    }
   } catch(e) {
     console.error('fixtures error:', e);
   }
@@ -1572,6 +1634,13 @@ setInterval(async () => {
 })();
 
 // Open / close
+// Helper — read team names from data attributes (avoids quote escaping issues)
+function openDrawerFromCard(el) {
+  const home = (el.getAttribute('data-home') || '').replace(/&quot;/g, '"');
+  const away = (el.getAttribute('data-away') || '').replace(/&quot;/g, '"');
+  if (home && away) openDrawer(home, away);
+}
+
 // Track current analysis request to avoid race conditions
 let _analysisToken = 0;
 
@@ -1738,7 +1807,7 @@ function paywallHTML(home, away) {
 const _origCardHTML = window._cardHTML;
 function cardHTMLWithClick(m) {
   return `
-    <div class="match-card" onclick="openDrawer('${m.home.name.replace(/'/g,"\\'")}','${m.away.name.replace(/'/g,"\\'")}')">
+    <div class="match-card" data-home="${m.home.name.replace(/"/g,'&quot;')}" data-away="${m.away.name.replace(/"/g,'&quot;')}" onclick="openDrawerFromCard(this)">
       <div class="match-team">
         <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
         <span>${m.home.name}</span>
@@ -1778,7 +1847,11 @@ function renderFixtures(matches) {
     if (i===3) val.textContent = live.length || upcoming.slice(0,6).length;
   });
 
-  const display = [...live,...finished.slice(-2),...upcoming].slice(0,8);
+  const nowL2 = new Date();
+  const padL2 = n => String(n).padStart(2,'0');
+  const todayL2 = `${padL2(nowL2.getMonth()+1)}/${padL2(nowL2.getDate())}/${nowL2.getFullYear()}`;
+  const displayToday2 = matches.filter(m => m.date && m.date.startsWith(todayL2));
+  const display = displayToday2.length ? displayToday2 : [...live,...finished.slice(-2),...upcoming].slice(0,8);
 
   const dashGrid = document.querySelector('#view-dashboard .matches-grid');
   if (dashGrid) dashGrid.innerHTML = display.slice(0,3).map(cardHTMLWithClick).join('');
