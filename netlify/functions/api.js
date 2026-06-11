@@ -89,25 +89,42 @@ async function getFixtures() {
 }
 
 // ── ACTION: GROUPS ─────────────────────────────────────────────────────────
-// Source: worldcup26.ir — free, no auth required
+// Source: worldcup26.ir — crosses fixtures to resolve team names from IDs
 async function getGroups() {
   try {
-    const data = await fetchJSON('https://worldcup26.ir/get/groups');
-    const raw = Array.isArray(data) ? data : data.groups || [];
+    // Fetch both in parallel
+    const [groupData, fixtureData] = await Promise.all([
+      fetchJSON('https://worldcup26.ir/get/groups'),
+      fetchJSON('https://worldcup26.ir/get/games'),
+    ]);
+
+    // Build team_id → name map from fixtures
+    const teamMap = {};
+    const games = Array.isArray(fixtureData) ? fixtureData : fixtureData.games || [];
+    games.forEach(g => {
+      if (g.home_team_id && g.home_team_name_en) teamMap[String(g.home_team_id)] = g.home_team_name_en;
+      if (g.away_team_id && g.away_team_name_en) teamMap[String(g.away_team_id)] = g.away_team_name_en;
+    });
+
+    const raw = Array.isArray(groupData) ? groupData : groupData.groups || [];
     const groups = raw.map(g => ({
-      name:  g.name  || g.group || g._id,
-      teams: (g.teams || []).map(t => ({
-        name:   t.name   || t.team   || t,
-        flag:   t.flag   || t.emoji  || '',
-        played: t.played ?? t.gp ?? 0,
-        won:    t.won    ?? t.w  ?? 0,
-        drawn:  t.drawn  ?? t.d  ?? 0,
-        lost:   t.lost   ?? t.l  ?? 0,
-        gf:     t.gf     ?? t.goalsFor      ?? 0,
-        ga:     t.ga     ?? t.goalsAgainst  ?? 0,
-        gd:     t.gd     ?? (t.gf - t.ga)   ?? 0,
-        points: t.points ?? t.pts ?? 0,
-      })).sort((a, b) => b.points - a.points || b.gd - a.gd),
+      name:  g.name || g.group || g._id,
+      teams: (g.teams || []).map(t => {
+        const tid = String(t.team_id || t.id || '');
+        const teamName = teamMap[tid] || tid;
+        return {
+          name:   teamName,
+          flag:   t.flag || '',
+          played: parseInt(t.mp  || t.played || 0),
+          won:    parseInt(t.w   || t.won    || 0),
+          drawn:  parseInt(t.d   || t.drawn  || 0),
+          lost:   parseInt(t.l   || t.lost   || 0),
+          gf:     parseInt(t.gf  || 0),
+          ga:     parseInt(t.ga  || 0),
+          gd:     parseInt(t.gd  || 0),
+          points: parseInt(t.pts || t.points || 0),
+        };
+      }).sort((a, b) => b.points - a.points || b.gd - a.gd),
     }));
     return { ok: true, groups };
   } catch (e) {
