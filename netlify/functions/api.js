@@ -126,6 +126,8 @@ async function getGroups() {
         };
       }).sort((a, b) => b.points - a.points || b.gd - a.gd),
     }));
+    // Sort groups alphabetically A→L
+    groups.sort((a, b) => a.name.localeCompare(b.name));
     return { ok: true, groups };
   } catch (e) {
     return { ok: false, error: e.message, groups: [] };
