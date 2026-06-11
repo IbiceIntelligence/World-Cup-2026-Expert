@@ -1304,11 +1304,11 @@ function renderFixtures(matches) {
 
   // Dashboard — top 3 today
   const dashGrid = document.querySelector('#view-dashboard .matches-grid');
-  if (dashGrid) dashGrid.innerHTML = displayToday.slice(0, 3).map(cardHTML).join('');
+  if (dashGrid) dashGrid.innerHTML = displayToday.slice(0, 3).map(cardHTMLWithClick).join('');
 
   // Partidos — all today (tab filter can change this)
   const partGrid = document.querySelector('#view-partidos .matches-grid');
-  if (partGrid) partGrid.innerHTML = displayToday.map(cardHTML).join('');
+  if (partGrid) partGrid.innerHTML = displayToday.map(cardHTMLWithClick).join('');
 
   // Ticker — update with live matches
   if (live.length > 0) {
@@ -1846,7 +1846,11 @@ function renderAnalysis(body, home, away, data) {
     <div class="drawer-section">
       <div class="drawer-section-title">${currentLang==='en'?'PREDICTION':'PREDICCIÓN'}</div>
       <div class="prediction-box">
-        <div class="prediction-score">${pred.score || pred.result || (currentLang==='en'?'2 - 0':'2 - 0')}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:#9a9488;text-align:right;max-width:120px;line-height:1.3">${flag(home)} ${home}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:#D4AF37;min-width:60px;text-align:center">${pred.score || pred.result || '?-?'}</span>
+          <span style="font-size:12px;font-weight:600;color:#9a9488;text-align:left;max-width:120px;line-height:1.3">${flag(away)} ${away}</span>
+        </div>
         <div class="prediction-note">${pred.note || pred.confidence || pred.comment || (currentLang==='en'?'Most likely outcome based on AI analysis':'Resultado más probable según análisis AI')}</div>
       </div>
     </div>
@@ -1906,55 +1910,6 @@ function cardHTMLWithClick(m) {
     </div>`;
 }
 
-// Patch renderFixtures to use click-enabled cards
-const _origRenderFixtures = renderFixtures;
-function renderFixtures(matches) {
-  const today = new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
-  const live     = matches.filter(m => m.status === 'live');
-  const finished = matches.filter(m => m.status === 'finished');
-  const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 8);
-
-  const totalGoals = matches.reduce((s,m) => s+(parseInt(m.homeScore)||0)+(parseInt(m.awayScore)||0),0);
-  const played = matches.filter(m => m.status==='finished').length;
-  document.querySelectorAll('.stat-card').forEach((card,i) => {
-    const val = card.querySelector('.val');
-    if (!val) return;
-    if (i===0) val.textContent = played;
-    if (i===1) val.textContent = totalGoals;
-    if (i===2) val.textContent = played?(totalGoals/played).toFixed(2):'0.00';
-    if (i===3) val.textContent = live.length || upcoming.slice(0,6).length;
-  });
-
-  const nowL2 = new Date();
-  const padL2 = n => String(n).padStart(2,'0');
-  const todayL2 = `${padL2(nowL2.getMonth()+1)}/${padL2(nowL2.getDate())}/${nowL2.getFullYear()}`;
-  const displayToday2 = matches.filter(m => m.date && m.date.startsWith(todayL2));
-  // Only show today's matches — never mix with other days
-  const display = displayToday2;
-
-  const dashGrid = document.querySelector('#view-dashboard .matches-grid');
-  if (dashGrid) dashGrid.innerHTML = display.slice(0,3).map(cardHTMLWithClick).join('');
-
-  const partGrid = document.querySelector('#view-partidos .matches-grid');
-  if (partGrid) partGrid.innerHTML = display.map(cardHTMLWithClick).join('');
-
-  if (live.length > 0) {
-    const tickerInner = document.querySelector('.ticker-inner');
-    if (tickerInner) {
-      const liveItems = live.map(m =>
-        `<div class="ticker-item">
-          <span style="font-size:14px">${flag(m.home.name)}</span>
-          <span class="team">${m.home.name.substring(0,3).toUpperCase()}</span>
-          <span class="score">${m.homeScore}-${m.awayScore}</span>
-          <span style="font-size:14px">${flag(m.away.name)}</span>
-          <span class="team">${m.away.name.substring(0,3).toUpperCase()}</span>
-          <span class="live">● LIVE ${m.minute||''}</span>
-        </div>`
-      ).join('');
-      tickerInner.innerHTML = liveItems + liveItems;
-    }
-  }
-}
 </script>
 </body>
 </html>
