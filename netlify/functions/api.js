@@ -1,430 +1,193 @@
-const https = require("https");
-const http = require("http");
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const MODEL = 'claude-sonnet-4-20250514';
 
-const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY;
-const APIFY_TOKEN = process.env.APIFY_TOKEN;
-
-function fetchJSON(url, options = {}) {
-  return new Promise((resolve, reject) => {
-    const lib = url.startsWith("https") ? https : http;
-    const req = lib.request(url, options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          resolve({ status: res.statusCode, body: JSON.parse(data) });
-        } catch {
-          resolve({ status: res.statusCode, body: data });
-        }
-      });
-    });
-    req.on("error", reject);
-    if (options.body) req.write(options.body);
-    req.end();
-  });
-}
-
-// Wraps any promise with a timeout
-function withTimeout(promise, ms, fallback) {
-  return Promise.race([
-    promise,
-    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
-}
-
-async function runApifyActor(actorId, input) {
-  const runUrl = `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/runs?token=${APIFY_TOKEN}&waitForFinish=120`;
-  const runRes = await fetchJSON(runUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (runRes.status !== 201 && runRes.status !== 200) {
-    throw new Error(`Actor run failed: ${JSON.stringify(runRes.body)}`);
-  }
-  const runId = runRes.body?.data?.id || runRes.body?.id;
-  if (!runId) throw new Error("No run ID returned from Apify");
-
-  // Poll for completion
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 4000));
-    const statusRes = await fetchJSON(
-      `https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_TOKEN}`
-    );
-    const status = statusRes.body?.data?.status;
-    if (status === "SUCCEEDED") {
-      const datasetId = statusRes.body?.data?.defaultDatasetId;
-      const itemsRes = await fetchJSON(
-        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}&limit=50`
-      );
-      return itemsRes.body;
-    }
-    if (["FAILED", "ABORTED", "TIMED-OUT"].includes(status)) {
-      throw new Error(`Actor ${status}`);
-    }
-  }
-  throw new Error("Actor timed out after polling");
-}
-
-async function callClaude(messages, systemPrompt) {
-  const payload = JSON.stringify({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2048,
-    system: systemPrompt,
-    messages,
-  });
-  const res = await fetchJSON("https://api.anthropic.com/v1/messages", {
-    method: "POST",
+async function callClaude(system, user) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_KEY,
-      "anthropic-version": "2023-06-01",
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
     },
-    body: payload,
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 1000,
+      system,
+      messages: [{ role: 'user', content: user }],
+    }),
   });
-  if (res.status !== 200) throw new Error(`Claude error: ${JSON.stringify(res.body)}`);
-  return res.body;
+  if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
+  const data = await res.json();
+  const text = data.content?.[0]?.text || '{}';
+  const clean = text.replace(/```json\n?|```/g, '').trim();
+  return JSON.parse(clean);
 }
 
-// Fallback WC2026 data from OpenFootball (free, no auth)
-async function getOpenFootballData() {
-  try {
-    const res = await fetchJSON(
-      "https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json"
-    );
-    return res.body;
-  } catch {
-    return null;
-  }
-}
-
-// Fallback football-data.org (free tier)
-async function getFootballDataMatches() {
-  try {
-    const res = await fetchJSON(
-      "https://api.football-data.org/v4/competitions/WC/matches?season=2026",
-      { headers: { "X-Auth-Token": process.env.FOOTBALL_DATA_TOKEN || "" } }
-    );
-    return res.body;
-  } catch {
-    return null;
-  }
-}
-
-// Static fallback fixtures for today (WC2026 starts June 11, 2026)
-function getStaticFallback() {
-  const today = new Date().toISOString().slice(0, 10);
-  return {
-    source: "static_fallback",
-    date: today,
-    matches: [
-      {
-        id: "wc2026_001",
-        home: "Mexico",
-        away: "Poland",
-        homeFlagUrl: "https://flagcdn.com/w40/mx.png",
-        awayFlagUrl: "https://flagcdn.com/w40/pl.png",
-        time: "17:00",
-        venue: "Estadio Azteca, Mexico City",
-        stage: "Group Stage - Group B",
-        odds: { home: 2.1, draw: 3.4, away: 3.6 },
-        form: { home: ["W", "W", "D", "L", "W"], away: ["W", "D", "W", "W", "L"] },
-      },
-      {
-        id: "wc2026_002",
-        home: "USA",
-        away: "Canada",
-        homeFlagUrl: "https://flagcdn.com/w40/us.png",
-        awayFlagUrl: "https://flagcdn.com/w40/ca.png",
-        time: "20:00",
-        venue: "SoFi Stadium, Los Angeles",
-        stage: "Group Stage - Group A",
-        odds: { home: 1.85, draw: 3.6, away: 4.2 },
-        form: { home: ["W", "W", "W", "D", "W"], away: ["D", "W", "L", "W", "D"] },
-      },
-      {
-        id: "wc2026_003",
-        home: "Brazil",
-        away: "Serbia",
-        homeFlagUrl: "https://flagcdn.com/w40/br.png",
-        awayFlagUrl: "https://flagcdn.com/w40/rs.png",
-        time: "14:00",
-        venue: "AT&T Stadium, Dallas",
-        stage: "Group Stage - Group G",
-        odds: { home: 1.45, draw: 4.2, away: 7.5 },
-        form: { home: ["W", "W", "W", "W", "D"], away: ["W", "D", "W", "L", "W"] },
-      },
-    ],
-    groupStandings: {
-      A: [
-        { team: "USA", p: 1, w: 1, d: 0, l: 0, gf: 2, ga: 0, pts: 3 },
-        { team: "Canada", p: 1, w: 0, d: 1, l: 0, gf: 1, ga: 1, pts: 1 },
-        { team: "Uruguay", p: 1, w: 0, d: 1, l: 0, gf: 1, ga: 1, pts: 1 },
-        { team: "Panama", p: 1, w: 0, d: 0, l: 1, gf: 0, ga: 2, pts: 0 },
-      ],
-      B: [
-        { team: "Mexico", p: 1, w: 1, d: 0, l: 0, gf: 3, ga: 1, pts: 3 },
-        { team: "Poland", p: 1, w: 1, d: 0, l: 0, gf: 2, ga: 0, pts: 3 },
-        { team: "Saudi Arabia", p: 1, w: 0, d: 0, l: 1, gf: 0, ga: 2, pts: 0 },
-        { team: "Ecuador", p: 1, w: 0, d: 0, l: 1, gf: 1, ga: 3, pts: 0 },
-      ],
-      G: [
-        { team: "Brazil", p: 1, w: 1, d: 0, l: 0, gf: 3, ga: 0, pts: 3 },
-        { team: "Serbia", p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 },
-        { team: "Switzerland", p: 1, w: 0, d: 1, l: 0, gf: 1, ga: 1, pts: 1 },
-        { team: "Cameroon", p: 1, w: 0, d: 0, l: 1, gf: 0, ga: 3, pts: 0 },
-      ],
-    },
-    news: [
-      {
-        title: "Mbappe cleared to play after training session",
-        source: "ESPN",
-        time: "2h ago",
-      },
-      { title: "Brazil squad fully fit ahead of opener", source: "FIFA", time: "4h ago" },
-      {
-        title: "USA vs Canada rivalry renewed on biggest stage",
-        source: "CBS Sports",
-        time: "6h ago",
-      },
-      {
-        title: "Estadio Azteca sells out — 87,000 fans for Mexico opener",
-        source: "Reuters",
-        time: "8h ago",
-      },
-      {
-        title: "VAR & semi-automated offside tech confirmed for all 104 matches",
-        source: "FIFA",
-        time: "12h ago",
-      },
-    ],
-    tickerItems: [
-      "🏆 FIFA World Cup 2026 — 48 Teams, 104 Matches",
-      "⚽ Opening match: Mexico vs Poland @ Azteca — June 11",
-      "🇺🇸 USA • 🇲🇽 Mexico • 🇨🇦 Canada — Host Nations",
-      "📊 Real-time odds from DraftKings, FanDuel, BetMGM & more",
-      "💎 Value bets updated every 30 minutes",
-      "🎯 AI-powered predictions with xG models",
-    ],
-  };
-}
-
-exports.handler = async (event) => {
+export const handler = async (event) => {
   const headers = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Content-Type": "application/json",
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Content-Type': 'application/json',
   };
 
-  if (event.httpMethod === "OPTIONS") {
-    return { statusCode: 204, headers, body: "" };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers, body: '' };
   }
 
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  let body;
   try {
-    const body = JSON.parse(event.body || "{}");
-    const { action } = body;
+    body = JSON.parse(event.body || '{}');
+  } catch {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
+  }
 
-    // ── ACTION: run-actor ──────────────────────────────────────────────────────
-    if (action === "run-actor") {
-      const { actorId, input } = body;
-      if (!APIFY_TOKEN) throw new Error("APIFY_TOKEN not configured");
-      try {
-        const result = await runApifyActor(actorId, input);
-        return { statusCode: 200, headers, body: JSON.stringify({ success: true, data: result }) };
-      } catch (err) {
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({ success: false, error: err.message, fallback: true }),
-        };
-      }
-    }
+  const { action, lang = 'es', match, analyses } = body;
+  const isEs = lang === 'es';
 
-    // ── ACTION: claude ─────────────────────────────────────────────────────────
-    if (action === "claude") {
-      const { messages, systemPrompt } = body;
-      if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_KEY not configured");
-      const result = await callClaude(messages, systemPrompt);
-      return { statusCode: 200, headers, body: JSON.stringify(result) };
-    }
+  try {
+    let result;
 
-    // ── ACTION: get-fixtures ───────────────────────────────────────────────────
-    if (action === "get-fixtures") {
-      // Skip Apify (too slow/unreliable) — serve static WC2026 fixtures instantly
-      // Frontend has full fixture list built-in; this just confirms static mode
-      const fallback = getStaticFallback();
-      return { statusCode: 200, headers, body: JSON.stringify({ source: "static", data: fallback }) };
-    }
+    // ── ANALYZE MATCH ────────────────────────────────────────────
+    if (action === 'analyze-match') {
+      const m = match;
+      const system = isEs
+        ? 'Eres un analista experto en apuestas deportivas del Mundial FIFA 2026. Responde SOLO con JSON válido, sin texto adicional ni backticks.'
+        : 'You are an expert FIFA World Cup 2026 sports betting analyst. Respond ONLY with valid JSON, no extra text or backticks.';
 
-    // ── ACTION: get-odds ───────────────────────────────────────────────────────
-    if (action === "get-odds") {
-      const fallback = getStaticFallback();
-      return { statusCode: 200, headers, body: JSON.stringify({ source: "static_odds", data: fallback.matches }) };
-    }
-
-    // ── ACTION: analyze-match ──────────────────────────────────────────────────
-    // Analyzes ONE match — called in parallel from frontend for each match
-    if (action === "analyze-match") {
-      if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_KEY not configured");
-
-      const { match, lang = "es" } = body;
-      if (!match) throw new Error("No match data provided");
-
-      const systemPrompt = `You are an elite FIFA World Cup 2026 betting analyst. Expert in xG models, Asian handicap, value betting.
-
-CRITICAL: Respond ONLY with valid JSON, no markdown, no backticks, no preamble.
-
-JSON format:
+      const user = isEs
+        ? `Analiza el partido: ${m.home} vs ${m.away} (${m.stage}, ${m.time}).
+Odds actuales: Local ${m.odds?.home || 2.1} | Empate ${m.odds?.draw || 3.3} | Visitante ${m.odds?.away || 3.5}.
+Forma reciente: ${m.home} [${(m.form?.home || []).join(',')}] | ${m.away} [${(m.form?.away || []).join(',')}].
+Devuelve exactamente este JSON:
 {
-  "matchId": "string",
-  "home": "string",
-  "away": "string",
+  "matchId": "${m.id}",
+  "home": "${m.home}",
+  "away": "${m.away}",
   "prediction": {
-    "bear": { "scenario": "string", "probability": 0.0, "score": "string" },
-    "base": { "scenario": "string", "probability": 0.0, "score": "string" },
-    "bull": { "scenario": "string", "probability": 0.0, "score": "string" }
+    "bear": { "label": "Escenario bajista", "prob": 25, "desc": "descripción breve del escenario pesimista" },
+    "base": { "label": "Escenario base", "prob": 50, "desc": "descripción breve del escenario más probable" },
+    "bull": { "label": "Escenario alcista", "prob": 25, "desc": "descripción breve del escenario optimista" }
   },
   "recommendedBet": {
-    "market": "string",
-    "selection": "string",
-    "odds_decimal": 0.0,
-    "odds_american": "+000",
-    "stake": "1u|2u|3u|4u|5u",
-    "edge": "string",
-    "confidence": "HIGH|MEDIUM|LOW",
+    "market": "nombre del mercado (ej: 1X2, Over/Under 2.5, BTTS)",
+    "selection": "selección recomendada",
+    "odds_decimal": 2.10,
+    "odds_american": "+110",
+    "stake": "2u",
+    "edge": "+8.5%",
+    "confidence": "HIGH",
     "valueFlag": true
   },
-  "keyFactors": ["string", "string", "string"],
-  "lineMovement": "string",
-  "xgAnalysis": "string",
-  "summary": "string"
-}`;
-
-      const userMsg = `Analyze this single World Cup 2026 match. Language: ${lang === "es" ? "Spanish" : "English"}.
-
-Match: ${match.home} vs ${match.away}
-Stage: ${match.stage || "Group Stage"}
-Venue: ${match.venue || "TBD"}
-Time: ${match.time || "TBD"}
-Odds: Home ${match.odds?.home || 2.0} | Draw ${match.odds?.draw || 3.3} | Away ${match.odds?.away || 3.5}
-Home form (last 5): ${(match.form?.home || []).join(",")}
-Away form (last 5): ${(match.form?.away || []).join(",")}
-Date: ${new Date().toISOString().slice(0, 10)}
-
-Return ONLY the JSON object.`;
-
-      const claudeResult = await callClaude([{ role: "user", content: userMsg }], systemPrompt);
-      const rawText = claudeResult.content?.[0]?.text || "{}";
-
-      let parsed;
-      try {
-        parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { error: "Parse error", matchId: match.id, home: match.home, away: match.away };
-      }
-
-      return { statusCode: 200, headers, body: JSON.stringify(parsed) };
-    }
-
-    // ── ACTION: generate-summary ───────────────────────────────────────────────
-    // Takes all individual match analyses and generates top picks + market insights
-    if (action === "generate-summary") {
-      if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_KEY not configured");
-
-      const { analyses, lang = "es" } = body;
-      if (!analyses || !analyses.length) throw new Error("No analyses provided");
-
-      const systemPrompt = `You are an elite FIFA World Cup 2026 betting analyst. 
-      
-CRITICAL: Respond ONLY with valid JSON, no markdown, no backticks.
-
-JSON format:
+  "keyFactors": ["Factor clave 1", "Factor clave 2", "Factor clave 3"],
+  "xgAnalysis": "Análisis xG breve y concreto",
+  "lineMovement": "Movimiento de línea breve"
+}`
+        : `Analyze the match: ${m.home} vs ${m.away} (${m.stage}, ${m.time}).
+Current odds: Home ${m.odds?.home || 2.1} | Draw ${m.odds?.draw || 3.3} | Away ${m.odds?.away || 3.5}.
+Recent form: ${m.home} [${(m.form?.home || []).join(',')}] | ${m.away} [${(m.form?.away || []).join(',')}].
+Return exactly this JSON:
 {
-  "reportTitle": "string",
-  "generatedAt": "ISO timestamp",
-  "topPicks": [
-    { "rank": 1, "match": "string", "bet": "string", "odds_decimal": 0.0, "expectedValue": "string", "confidence": "HIGH|MEDIUM|LOW", "stake": "string" }
-  ],
-  "marketInsights": "string",
-  "disclaimer": "string"
+  "matchId": "${m.id}",
+  "home": "${m.home}",
+  "away": "${m.away}",
+  "prediction": {
+    "bear": { "label": "Bear scenario", "prob": 25, "desc": "brief bear case description" },
+    "base": { "label": "Base scenario", "prob": 50, "desc": "brief most likely description" },
+    "bull": { "label": "Bull scenario", "prob": 25, "desc": "brief bull case description" }
+  },
+  "recommendedBet": {
+    "market": "market name (e.g. 1X2, Over/Under 2.5, BTTS)",
+    "selection": "recommended selection",
+    "odds_decimal": 2.10,
+    "odds_american": "+110",
+    "stake": "2u",
+    "edge": "+8.5%",
+    "confidence": "HIGH",
+    "valueFlag": true
+  },
+  "keyFactors": ["Key factor 1", "Key factor 2", "Key factor 3"],
+  "xgAnalysis": "Brief concrete xG analysis",
+  "lineMovement": "Brief line movement note"
 }`;
 
-      const userMsg = `Based on these match analyses, generate the top picks ranking and market insights. Language: ${lang === "es" ? "Spanish" : "English"}.
-
-Analyses: ${JSON.stringify(analyses.map(a => ({
-  match: `${a.home} vs ${a.away}`,
-  bet: a.recommendedBet?.selection,
-  market: a.recommendedBet?.market,
-  odds: a.recommendedBet?.odds_decimal,
-  confidence: a.recommendedBet?.confidence,
-  edge: a.recommendedBet?.edge,
-  valueFlag: a.recommendedBet?.valueFlag,
-})))}
-
-Rank the top 3-5 picks by value and confidence. Return ONLY the JSON object.`;
-
-      const claudeResult = await callClaude([{ role: "user", content: userMsg }], systemPrompt);
-      const rawText = claudeResult.content?.[0]?.text || "{}";
-
-      let parsed;
-      try {
-        parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { error: "Parse error", topPicks: [], marketInsights: "" };
-      }
-
-      return { statusCode: 200, headers, body: JSON.stringify(parsed) };
+      result = await callClaude(system, user);
     }
 
-    // ── ACTION: generate-report (legacy, keep for compatibility) ───────────────
-    if (action === "generate-report") {
-      if (!ANTHROPIC_KEY) throw new Error("ANTHROPIC_KEY not configured");
+    // ── GENERATE SUMMARY ─────────────────────────────────────────
+    else if (action === 'generate-summary') {
+      const matchList = (analyses || [])
+        .map(a => `${a.home} vs ${a.away}: ${a.recommendedBet?.selection} @ ${a.recommendedBet?.odds_decimal} (${a.recommendedBet?.confidence})`)
+        .join('\n');
 
-      const { matchData, lang = "es" } = body;
-      const matchesToAnalyze = (matchData || getStaticFallback().matches).slice(0, 2);
+      const system = isEs
+        ? 'Eres un analista senior de apuestas deportivas del Mundial FIFA 2026. Responde SOLO con JSON válido, sin texto adicional ni backticks.'
+        : 'You are a senior FIFA World Cup 2026 betting analyst. Respond ONLY with valid JSON, no extra text or backticks.';
 
-      const systemPrompt = `You are an elite FIFA World Cup 2026 betting analyst. Expert in xG models, Asian handicap, value betting.
-Respond in ${lang === "es" ? "Spanish" : "English"}.
-CRITICAL: Respond ONLY with valid JSON, no markdown, no backticks.
-Format: { "reportTitle": "string", "generatedAt": "ISO", "matches": [...], "topPicks": [...], "marketInsights": "string", "disclaimer": "string" }`;
+      const user = isEs
+        ? `Basado en estos análisis de partidos:\n${matchList}\n\nDevuelve exactamente este JSON:
+{
+  "marketInsights": "Resumen ejecutivo de 2-3 oraciones sobre el mercado de hoy y las mejores oportunidades de valor.",
+  "topPicks": [
+    { "rank": 1, "match": "Equipo A vs Equipo B", "bet": "descripción apuesta", "odds_decimal": 2.10, "confidence": "HIGH", "stake": "2u", "expectedValue": "+12%" },
+    { "rank": 2, "match": "Equipo C vs Equipo D", "bet": "descripción apuesta", "odds_decimal": 1.85, "confidence": "MEDIUM", "stake": "1.5u", "expectedValue": "+7%" },
+    { "rank": 3, "match": "Equipo E vs Equipo F", "bet": "descripción apuesta", "odds_decimal": 3.20, "confidence": "MEDIUM", "stake": "1u", "expectedValue": "+15%" }
+  ]
+}`
+        : `Based on these match analyses:\n${matchList}\n\nReturn exactly this JSON:
+{
+  "marketInsights": "2-3 sentence executive summary of today's market and best value opportunities.",
+  "topPicks": [
+    { "rank": 1, "match": "Team A vs Team B", "bet": "bet description", "odds_decimal": 2.10, "confidence": "HIGH", "stake": "2u", "expectedValue": "+12%" },
+    { "rank": 2, "match": "Team C vs Team D", "bet": "bet description", "odds_decimal": 1.85, "confidence": "MEDIUM", "stake": "1.5u", "expectedValue": "+7%" },
+    { "rank": 3, "match": "Team E vs Team F", "bet": "bet description", "odds_decimal": 3.20, "confidence": "MEDIUM", "stake": "1u", "expectedValue": "+15%" }
+  ]
+}`;
 
-      const userMsg = `Analyze these matches: ${JSON.stringify(matchesToAnalyze)}. Date: ${new Date().toISOString().slice(0, 10)}. Return ONLY JSON.`;
-
-      const claudeResult = await callClaude([{ role: "user", content: userMsg }], systemPrompt);
-      const rawText = claudeResult.content?.[0]?.text || "{}";
-
-      let parsed;
-      try {
-        parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { error: "Parse error", raw: rawText.slice(0, 500) };
-      }
-
-      return { statusCode: 200, headers, body: JSON.stringify(parsed) };
+      result = await callClaude(system, user);
     }
 
-    // ── ACTION: get-news ───────────────────────────────────────────────────────
-    if (action === "get-news") {
-      // Return curated WC2026 news — Apify ESPN actor returns NBA/general sports noise
-      const wcNews = [
-        { title: "🇲🇽 México inaugura el Mundial 2026 vs Sudáfrica en el Estadio Azteca", source: "FIFA", time: "Hoy" },
-        { title: "Ochoa hace historia: único portero en 6 Copas del Mundo consecutivas", source: "ESPN", time: "2h" },
-        { title: "🇺🇸 USA debuta el 12 de junio vs Paraguay en SoFi Stadium, Los Ángeles", source: "CBS Sports", time: "3h" },
-        { title: "🇧🇷 Brasil vs Marruecos el 13 de junio — Vinicius Jr. listo para jugar", source: "FOX Sports", time: "4h" },
-        { title: "Azteca: primera sede en albergar 3 inauguraciones mundialistas (1970, 1986, 2026)", source: "Reuters", time: "5h" },
-        { title: "🇦🇷 Messi confirma participación — Argentina debuta vs Argelia el 16 de junio", source: "TyC Sports", time: "6h" },
-        { title: "VAR + offside semiautomático confirmados para los 104 partidos del torneo", source: "FIFA", time: "8h" },
-        { title: "🇫🇷 Mbappé al 100% — Francia llega como gran favorita al título", source: "L'Équipe", time: "10h" },
-      ];
-      return { statusCode: 200, headers, body: JSON.stringify({ source: "curated", data: wcNews }) };
+    // ── GET NEWS ─────────────────────────────────────────────────
+    else if (action === 'get-news') {
+      const system = isEs
+        ? 'Eres un periodista especializado en el Mundial FIFA 2026. Responde SOLO con JSON válido, sin texto adicional ni backticks.'
+        : 'You are a FIFA World Cup 2026 specialist journalist. Respond ONLY with valid JSON, no extra text or backticks.';
+
+      const user = isEs
+        ? `Genera 4 noticias recientes y relevantes del Mundial FIFA 2026 que está en curso (junio 2026). Devuelve exactamente este JSON:
+{
+  "data": [
+    { "title": "Titular noticia 1", "summary": "Resumen breve de 1-2 oraciones.", "category": "Resultados", "time": "Hace 2 horas" },
+    { "title": "Titular noticia 2", "summary": "Resumen breve de 1-2 oraciones.", "category": "Lesiones", "time": "Hace 4 horas" },
+    { "title": "Titular noticia 3", "summary": "Resumen breve de 1-2 oraciones.", "category": "Análisis", "time": "Hace 6 horas" },
+    { "title": "Titular noticia 4", "summary": "Resumen breve de 1-2 oraciones.", "category": "Estadísticas", "time": "Hace 8 horas" }
+  ]
+}`
+        : `Generate 4 recent relevant news items from the ongoing FIFA World Cup 2026 (June 2026). Return exactly this JSON:
+{
+  "data": [
+    { "title": "News headline 1", "summary": "Brief 1-2 sentence summary.", "category": "Results", "time": "2 hours ago" },
+    { "title": "News headline 2", "summary": "Brief 1-2 sentence summary.", "category": "Injuries", "time": "4 hours ago" },
+    { "title": "News headline 3", "summary": "Brief 1-2 sentence summary.", "category": "Analysis", "time": "6 hours ago" },
+    { "title": "News headline 4", "summary": "Brief 1-2 sentence summary.", "category": "Stats", "time": "8 hours ago" }
+  ]
+}`;
+
+      result = await callClaude(system, user);
     }
 
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ error: `Unknown action: ${action}` }),
-    };
+    else {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Unknown action: ${action}` }) };
+    }
+
+    return { statusCode: 200, headers, body: JSON.stringify(result) };
+
   } catch (err) {
+    console.error('Function error:', err);
     return {
       statusCode: 500,
       headers,
