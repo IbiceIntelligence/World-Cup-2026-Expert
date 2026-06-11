@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>IBICE Intelligence — World Cup FIFA 2026</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚽</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
 <style>
@@ -1102,10 +1103,12 @@ async function init() {
 
 // ── LANG ──────────────────────────────────────────────────────
 function setLang(lang) {
+  if (state.lang === lang) return;
   state.lang = lang;
   document.documentElement.lang = lang;
   document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
   applyTranslations();
+  if (state.report) generateReport();
 }
 
 function t(key) { return T[state.lang][key] || T.es[key] || key; }
@@ -1119,8 +1122,8 @@ function applyTranslations() {
   updateThemeBtn();
   if (state.report) renderReport(state.report);
   if (state.matches.length) renderMatches(state.matches);
-  // Re-render news in correct language
-  if (state.news && state.news.length) renderNews(state.news);
+  // Re-fetch news in correct language
+  loadNews();
 }
 
 // ── THEME ─────────────────────────────────────────────────────
@@ -1208,7 +1211,7 @@ function renderMatches(matches) {
       </div>
       <div class="match-odds">
         <div class="odd-box">
-          <div class="odd-label">${m.home.split(' ')[0]}</div>
+          <div class="odd-label">${t('home')}</div>
           <div class="odd-value">${m.odds.home?.toFixed(2) || '—'}</div>
         </div>
         <div class="odd-box">
@@ -1216,7 +1219,7 @@ function renderMatches(matches) {
           <div class="odd-value">${m.odds.draw?.toFixed(2) || '—'}</div>
         </div>
         <div class="odd-box">
-          <div class="odd-label">${m.away.split(' ')[0]}</div>
+          <div class="odd-label">${t('away')}</div>
           <div class="odd-value">${m.odds.away?.toFixed(2) || '—'}</div>
         </div>
       </div>
@@ -1565,12 +1568,15 @@ function renderAnalysisCard(m) {
 
 function renderScenario(type, scenario, emoji) {
   if (!scenario) return '';
+  // Claude returns prob (0-100) and desc; also support probability (0-1) and scenario
+  const prob = scenario.prob || (scenario.probability ? scenario.probability * 100 : 0);
+  const desc = scenario.desc || scenario.scenario || scenario.label || '';
   return `
     <div class="scenario-box ${type}">
       <div class="scenario-label">${emoji} ${type.toUpperCase()}</div>
-      <div class="scenario-score">${scenario.score || '—'}</div>
-      <div class="scenario-prob">${((scenario.probability || 0) * 100).toFixed(0)}%</div>
-      <div class="scenario-desc">${scenario.scenario || ''}</div>
+      <div class="scenario-score">${scenario.score || scenario.label || type}</div>
+      <div class="scenario-prob">${Math.round(prob)}%</div>
+      <div class="scenario-desc">${desc}</div>
     </div>
   `;
 }
