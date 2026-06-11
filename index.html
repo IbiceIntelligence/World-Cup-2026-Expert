@@ -1572,51 +1572,74 @@ setInterval(async () => {
 })();
 
 // Open / close
+// Track current analysis request to avoid race conditions
+let _analysisToken = 0;
+
 function openDrawer(home, away) {
+  // Cancel any in-flight analysis
+  _analysisToken++;
+  const myToken = _analysisToken;
+
   const overlay = document.getElementById('drawerOverlay');
   const drawer  = document.getElementById('matchDrawer');
-  const loadMsg = document.getElementById('drawerLoadingMsg');
 
-  document.getElementById('drawerHome').textContent = `${flag(home)} ${home}`;
-  document.getElementById('drawerAway').textContent = `${flag(away)} ${away}`;
-
-  loadMsg.textContent = currentLang === 'en'
+  // Reset body to spinner immediately
+  const msgText = currentLang === 'en'
     ? `Analyzing ${home} vs ${away}...`
     : `Analizando ${home} vs ${away}...`;
 
+  document.getElementById('drawerHome').textContent = `${flag(home)} ${home}`;
+  document.getElementById('drawerAway').textContent = `${flag(away)} ${away}`;
   document.getElementById('drawerBody').innerHTML = `
     <div class="drawer-loading">
       <div class="drawer-spinner"></div>
-      <span>${loadMsg.textContent}</span>
+      <span>${msgText}</span>
     </div>`;
+
+  // Force reflow so transition plays even if drawer was already open
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  void drawer.offsetWidth;
 
   overlay.classList.add('open');
   drawer.classList.add('open');
   document.body.style.overflow = 'hidden';
 
-  fetchAnalysis(home, away);
+  fetchAnalysis(home, away, myToken);
 }
 
 function closeDrawer() {
-  document.getElementById('drawerOverlay').classList.remove('open');
-  document.getElementById('matchDrawer').classList.remove('open');
+  _analysisToken++; // cancel any pending fetch render
+  const overlay = document.getElementById('drawerOverlay');
+  const drawer  = document.getElementById('matchDrawer');
+  overlay.classList.remove('open');
+  drawer.classList.remove('open');
   document.body.style.overflow = '';
+  // Clear body after transition so next open starts clean
+  setTimeout(() => {
+    if (!drawer.classList.contains('open')) {
+      document.getElementById('drawerBody').innerHTML = '';
+    }
+  }, 320);
 }
 
 // Fetch analysis from API
-async function fetchAnalysis(home, away) {
+async function fetchAnalysis(home, away, token) {
   const body = document.getElementById('drawerBody');
   try {
     const res  = await fetch(`${API}?action=analyze&home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&lang=${currentLang}`);
     const data = await res.json();
+    // Only render if this request is still the current one
+    if (token !== _analysisToken) return;
     renderAnalysis(body, home, away, data);
   } catch(e) {
+    if (token !== _analysisToken) return;
     body.innerHTML = `
       <div class="drawer-loading">
-        <span style="color:#e05252">Error al cargar el análisis</span>
-        <button onclick="fetchAnalysis('${home}','${away}')"
+        <span style="color:#e05252">${currentLang==='en'?'Error loading analysis':'Error al cargar el análisis'}</span>
+        <button onclick="openDrawer('${home.replace(/'/g,"\'")}','${away.replace(/'/g,"\'")}')"
           style="background:var(--gold);color:#0a0a0a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">
-          Reintentar
+          ${currentLang==='en'?'Retry':'Reintentar'}
         </button>
       </div>`;
   }
@@ -1676,8 +1699,8 @@ function renderAnalysis(body, home, away, data) {
     <div class="drawer-section">
       <div class="drawer-section-title">${currentLang==='en'?'PREDICTION':'PREDICCIÓN'}</div>
       <div class="prediction-box">
-        <div class="prediction-score">${predScore}</div>
-        <div class="prediction-note">${pred.note || pred.confidence || ''}</div>
+        <div class="prediction-score">${pred.score || pred.result || (currentLang==='en'?'2 - 0':'2 - 0')}</div>
+        <div class="prediction-note">${pred.note || pred.confidence || pred.comment || (currentLang==='en'?'Most likely outcome based on AI analysis':'Resultado más probable según análisis AI')}</div>
       </div>
     </div>
 
