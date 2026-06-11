@@ -66,18 +66,21 @@ async function getFixtures() {
     const data = await fetchJSON('https://worldcup26.ir/get/games');
     // Normalize to our format
     const matches = (Array.isArray(data) ? data : data.games || data.matches || [])
-      .slice(0, 48) // cap at 48 for performance
+      .slice(0, 48)
       .map(m => ({
         id:        m._id || m.id,
-        home:      m.homeTeam  || m.home_team  || m.team1 || {},
-        away:      m.awayTeam  || m.away_team  || m.team2 || {},
-        homeScore: m.homeScore ?? m.home_score ?? m.score1 ?? null,
-        awayScore: m.awayScore ?? m.away_score ?? m.score2 ?? null,
-        status:    m.status    || 'scheduled',
-        date:      m.date      || m.matchDate  || m.datetime || null,
-        venue:     m.stadium   || m.venue      || m.location || null,
-        group:     m.group     || m.stage      || null,
-        minute:    m.minute    || m.time       || null,
+        home:      { name: m.home_team_name_en || m.home_team_name_fa || '' },
+        away:      { name: m.away_team_name_en || m.away_team_name_fa || '' },
+        homeScore: m.home_score ?? null,
+        awayScore: m.away_score ?? null,
+        status:    m.finished === 'TRUE' ? 'finished'
+                 : (m.time_elapsed && m.time_elapsed !== 'notstarted') ? 'live'
+                 : 'scheduled',
+        date:      m.local_date || m.date || null,
+        venue:     m.stadium_id ? 'Stadium ' + m.stadium_id : null,
+        group:     m.group || null,
+        matchday:  m.matchday || null,
+        minute:    (m.time_elapsed && m.time_elapsed !== 'notstarted') ? m.time_elapsed : null,
       }));
     return { ok: true, matches };
   } catch (e) {
