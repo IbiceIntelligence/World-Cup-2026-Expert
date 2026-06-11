@@ -1418,7 +1418,7 @@ function setLoading(selector, msgES, msgEN) {
 }
 
 // ── BOOT: FETCH ALL DATA ───────────────────────────────────────
-loadLiveData() {
+async function loadLiveData() {
   // 1. Fixtures
   setLoading('#view-dashboard .matches-grid',
     'Cargando partidos...', 'Loading matches...');
