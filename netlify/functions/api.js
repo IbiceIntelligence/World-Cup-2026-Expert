@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1000,
+      max_tokens: 1200,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -201,16 +201,24 @@ async function getWeather(venue) {
 // ── ACTION: MATCH ANALYSIS (existing Claude flow) ─────────────────────────
 async function getMatchAnalysis(home, away, lang = 'es') {
   const system = lang === 'en'
-    ? `You are an expert FIFA World Cup 2026 betting analyst. 
-       Return ONLY valid JSON with keys: summary, picks (array of {market,recommendation,odds,ev,confidence}), 
-       keyFactors (array of strings), prediction.`
+    ? `You are an expert FIFA World Cup 2026 betting analyst.
+       Return ONLY valid JSON with these exact keys:
+       - summary: string (2-3 sentences narrative analysis)
+       - picks: array of up to 4 objects with {market, recommendation, odds, ev, confidence}
+         where odds is a decimal number string like "1.85", ev is a number like 8.5, confidence is 0-100
+       - keyFactors: array of 4-6 strings
+       - prediction: object with EXACTLY {score, note} where score MUST be "X-Y" number format e.g. {"score":"2-1","note":"Mexico wins at home"}`
     : `Eres un analista experto de apuestas para la Copa Mundial FIFA 2026.
-       Responde SOLO con JSON válido con claves: summary, picks (array de {market,recommendation,odds,ev,confidence}),
-       keyFactors (array de strings), prediction.`;
+       Responde SOLO con JSON válido con estas claves exactas:
+       - summary: string (análisis narrativo de 2-3 oraciones)
+       - picks: array de hasta 4 objetos con {market, recommendation, odds, ev, confidence}
+         donde odds es decimal como "1.85", ev es número como 8.5, confidence es 0-100
+       - keyFactors: array de 4-6 strings
+       - prediction: objeto con EXACTAMENTE {score, note} donde score DEBE ser formato "X-Y" con números ej: {"score":"2-1","note":"México gana como local"}`;
 
   const user = lang === 'en'
-    ? `Analyze the match: ${home} vs ${away}. Provide betting recommendations with expected value.`
-    : `Analiza el partido: ${home} vs ${away}. Dame recomendaciones de apuesta con valor esperado.`;
+    ? `Analyze the FIFA World Cup 2026 match: ${home} vs ${away}. Give betting recommendations with expected value and a score prediction.`
+    : `Analiza el partido de Copa Mundial FIFA 2026: ${home} vs ${away}. Da recomendaciones de apuesta con valor esperado y una predicción de marcador.`;
 
   return await callClaude(system, user);
 }
