@@ -1560,16 +1560,28 @@ function mergeGroupsWithFixtures(apiGroups, calcGroups) {
 
 // ── RENDER LIVE NEWS ──────────────────────────────────────────
 const NEWS_TAG_CLASSES = {
-  'INJURY':'nt-injury','LESIÓN':'nt-injury','RESULT':'nt-result','RESULTADO':'nt-result',
-  'ODDS':'nt-odds','CUOTAS':'nt-odds','PREVIEW':'nt-preview','LINEUP':'nt-preview','ALINEACIÓN':'nt-preview'
+  'INJURY':'nt-injury','LESIÓN':'nt-injury','LESION':'nt-injury',
+  'RESULT':'nt-result','RESULTADO':'nt-result',
+  'ODDS':'nt-odds','CUOTAS':'nt-odds','BETTING':'nt-odds',
+  'PREVIEW':'nt-preview','ANÁLISIS':'nt-preview','ANALYSIS':'nt-preview',
+  'LINEUP':'nt-preview','ALINEACIÓN':'nt-preview','ALINEACION':'nt-preview',
+  'NEWS':'nt-preview','NOTICIAS':'nt-preview'
 };
 const NEWS_TAG_LABELS = {
-  'INJURY':'Lesión','LESIÓN':'Lesión','RESULT':'Resultado','RESULTADO':'Resultado',
-  'ODDS':'Cuotas','CUOTAS':'Cuotas','PREVIEW':'Preview','LINEUP':'Alineación','ALINEACIÓN':'Alineación'
+  'INJURY':'Lesión','LESIÓN':'Lesión','LESION':'Lesión',
+  'RESULT':'Resultado','RESULTADO':'Resultado',
+  'ODDS':'Cuotas','CUOTAS':'Cuotas','BETTING':'Cuotas',
+  'PREVIEW':'Preview','ANÁLISIS':'Análisis','ANALYSIS':'Análisis',
+  'LINEUP':'Alineación','ALINEACIÓN':'Alineación','ALINEACION':'Alineación',
+  'NEWS':'Noticia','NOTICIAS':'Noticia'
 };
 const NEWS_TAG_LABELS_EN = {
-  'INJURY':'Injury','LESIÓN':'Injury','RESULT':'Result','RESULTADO':'Result',
-  'ODDS':'Odds','CUOTAS':'Odds','PREVIEW':'Preview','LINEUP':'Lineup','ALINEACIÓN':'Lineup'
+  'INJURY':'Injury','LESIÓN':'Injury','LESION':'Injury',
+  'RESULT':'Result','RESULTADO':'Result',
+  'ODDS':'Odds','CUOTAS':'Odds','BETTING':'Odds',
+  'PREVIEW':'Preview','ANÁLISIS':'Analysis','ANALYSIS':'Analysis',
+  'LINEUP':'Lineup','ALINEACIÓN':'Lineup','ALINEACION':'Lineup',
+  'NEWS':'News','NOTICIAS':'News'
 };
 
 function openNewsUrl(url, title) {
