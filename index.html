@@ -331,26 +331,10 @@ main { padding: 24px; }
   </div>
 </nav>
 
-<!-- TICKER -->
+<!-- TICKER — filled dynamically from real fixture data -->
 <div class="ticker-wrap">
-  <div class="ticker-inner">
-    <div class="ticker-item"><span style="font-size:14px">🇧🇷</span><span class="team">BRA</span><span class="score">2-0</span><span style="font-size:14px">🇲🇦</span><span class="team">MAR</span><span class="live">● LIVE 67'</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇺🇸</span><span class="team">USA</span><span class="score">1-1</span><span style="font-size:14px">🇵🇾</span><span class="team">PAR</span><span class="live">● LIVE 45'</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇲🇽</span><span class="team">MEX</span><span class="score">3-0</span><span style="font-size:14px">🇿🇦</span><span class="team">RSA</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇦🇷</span><span class="team">ARG</span><span class="score">vs</span><span style="font-size:14px">🇳🇬</span><span class="team">NGA</span> · 18:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇪🇸</span><span class="team">ESP</span><span class="score">vs</span><span style="font-size:14px">🇺🇾</span><span class="team">URU</span> · 21:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇫🇷</span><span class="team">FRA</span><span class="score">vs</span><span style="font-size:14px">🇯🇵</span><span class="team">JPN</span> · 21:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇩🇪</span><span class="team">GER</span><span class="score">vs</span><span style="font-size:14px">🇵🇹</span><span class="team">POR</span> · 15:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span><span class="team">ENG</span><span class="score">1-0</span><span style="font-size:14px">🇸🇳</span><span class="team">SEN</span></div>
-    <!-- duplicate -->
-    <div class="ticker-item"><span style="font-size:14px">🇧🇷</span><span class="team">BRA</span><span class="score">2-0</span><span style="font-size:14px">🇲🇦</span><span class="team">MAR</span><span class="live">● LIVE 67'</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇺🇸</span><span class="team">USA</span><span class="score">1-1</span><span style="font-size:14px">🇵🇾</span><span class="team">PAR</span><span class="live">● LIVE 45'</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇲🇽</span><span class="team">MEX</span><span class="score">3-0</span><span style="font-size:14px">🇿🇦</span><span class="team">RSA</span></div>
-    <div class="ticker-item"><span style="font-size:14px">🇦🇷</span><span class="team">ARG</span><span class="score">vs</span><span style="font-size:14px">🇳🇬</span><span class="team">NGA</span> · 18:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇪🇸</span><span class="team">ESP</span><span class="score">vs</span><span style="font-size:14px">🇺🇾</span><span class="team">URU</span> · 21:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇫🇷</span><span class="team">FRA</span><span class="score">vs</span><span style="font-size:14px">🇯🇵</span><span class="team">JPN</span> · 21:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🇩🇪</span><span class="team">GER</span><span class="score">vs</span><span style="font-size:14px">🇵🇹</span><span class="team">POR</span> · 15:00 ET</div>
-    <div class="ticker-item"><span style="font-size:14px">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span><span class="team">ENG</span><span class="score">1-0</span><span style="font-size:14px">🇸🇳</span><span class="team">SEN</span></div>
+  <div class="ticker-inner" id="tickerInner">
+    <div class="ticker-item" style="color:var(--text3)">⚽ Cargando partidos...</div>
   </div>
 </div>
 
@@ -1278,6 +1262,76 @@ function scoreDisplay(match) {
   return `${match.homeScore ?? 0} – ${match.awayScore ?? 0}`;
 }
 
+// ── BUILD TICKER FROM REAL FIXTURES ──────────────────────────
+function buildTicker(matches) {
+  const tickerInner = document.getElementById('tickerInner');
+  if (!tickerInner) return;
+
+  // Show: live first, then today's finished, then next 10 upcoming
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const todayStr = pad(now.getMonth()+1) + '/' + pad(now.getDate()) + '/' + now.getFullYear();
+
+  const live     = matches.filter(m => m.status === 'live');
+  const finished = matches.filter(m => m.status === 'finished' && m.date && m.date.startsWith(todayStr));
+  const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 12);
+
+  const tickerMatches = [...live, ...finished, ...upcoming];
+  if (!tickerMatches.length) return;
+
+  const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  const items = tickerMatches.map(m => {
+    const hf = flag(m.home.name);
+    const af = flag(m.away.name);
+    const ht = m.home.name.substring(0,3).toUpperCase();
+    const at = m.away.name.substring(0,3).toUpperCase();
+
+    // Format date for upcoming: "Jun 13 · 18:00"
+    let timeLabel = '';
+    if (m.date) {
+      const parts = m.date.split(' '); // ["06/13/2026", "18:00"]
+      const dateParts = parts[0].split('/'); // [MM, DD, YYYY]
+      const mon = months[parseInt(dateParts[0])] || '';
+      const day = parseInt(dateParts[1]);
+      const time = parts[1] || '';
+      timeLabel = mon + ' ' + day + (time ? ' · ' + time : '');
+    }
+
+    if (m.status === 'live') {
+      return '<div class="ticker-item">' +
+        '<span style="font-size:14px">' + hf + '</span>' +
+        '<span class="team">' + ht + '</span>' +
+        '<span class="score">' + (m.homeScore||0) + '-' + (m.awayScore||0) + '</span>' +
+        '<span style="font-size:14px">' + af + '</span>' +
+        '<span class="team">' + at + '</span>' +
+        '<span class="live">● LIVE ' + (m.minute||'') + '</span>' +
+        '</div>';
+    } else if (m.status === 'finished') {
+      return '<div class="ticker-item">' +
+        '<span style="font-size:14px">' + hf + '</span>' +
+        '<span class="team">' + ht + '</span>' +
+        '<span class="score">' + (m.homeScore||0) + '-' + (m.awayScore||0) + '</span>' +
+        '<span style="font-size:14px">' + af + '</span>' +
+        '<span class="team">' + at + '</span>' +
+        '<span style="font-size:9px;color:var(--text3);margin-left:4px">FT</span>' +
+        '</div>';
+    } else {
+      return '<div class="ticker-item">' +
+        '<span style="font-size:14px">' + hf + '</span>' +
+        '<span class="team">' + ht + '</span>' +
+        '<span class="score" style="font-size:12px;color:var(--text2)">vs</span>' +
+        '<span style="font-size:14px">' + af + '</span>' +
+        '<span class="team">' + at + '</span>' +
+        (timeLabel ? '<span style="font-size:9px;color:var(--text3);margin-left:4px">· ' + timeLabel + '</span>' : '') +
+        '</div>';
+    }
+  }).join('');
+
+  // Duplicate for seamless loop
+  tickerInner.innerHTML = items + items;
+}
+
 // ── RENDER FIXTURES ────────────────────────────────────────────
 function renderFixtures(matches) {
   // Split: live/finished today vs upcoming
@@ -1339,23 +1393,8 @@ function renderFixtures(matches) {
   const partGrid = document.querySelector('#view-partidos .matches-grid');
   if (partGrid) partGrid.innerHTML = displayToday.map(cardHTMLWithClick).join('');
 
-  // Ticker — update with live matches
-  if (live.length > 0) {
-    const tickerInner = document.querySelector('.ticker-inner');
-    if (tickerInner) {
-      const liveItems = live.map(m =>
-        `<div class="ticker-item">
-          <span style="font-size:14px">${flag(m.home.name)}</span>
-          <span class="team">${m.home.name.substring(0,3).toUpperCase()}</span>
-          <span class="score">${m.homeScore}-${m.awayScore}</span>
-          <span style="font-size:14px">${flag(m.away.name)}</span>
-          <span class="team">${m.away.name.substring(0,3).toUpperCase()}</span>
-          <span class="live">● LIVE ${m.minute||''}</span>
-        </div>`
-      ).join('');
-      tickerInner.innerHTML = liveItems + liveItems; // duplicate for loop
-    }
-  }
+  // Ticker — always rebuild from all matches (live + finished + upcoming)
+  buildTicker(matches);
 }
 
 // ── RENDER GROUPS ──────────────────────────────────────────────
@@ -1533,6 +1572,16 @@ const NEWS_TAG_LABELS_EN = {
   'ODDS':'Odds','CUOTAS':'Odds','PREVIEW':'Preview','LINEUP':'Lineup','ALINEACIÓN':'Lineup'
 };
 
+function openNewsUrl(url, title) {
+  if (url && url.startsWith('http')) {
+    window.open(url, '_blank', 'noopener');
+  } else {
+    // Fallback: Google News search
+    const q = encodeURIComponent(title + ' FIFA World Cup 2026');
+    window.open('https://news.google.com/search?q=' + q, '_blank', 'noopener');
+  }
+}
+
 function renderNews(articles) {
   const html = articles.map(a => {
     const tagKey = (a.tag || 'NEWS').toUpperCase();
@@ -1541,11 +1590,15 @@ function renderNews(articles) {
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
     const src = a.source || 'IBICE Intelligence';
     const time = a.timeAgo || (currentLang === 'en' ? 'Just now' : 'Ahora');
+    const hasUrl = a.url && a.url.startsWith('http');
+    const cursor = 'cursor:pointer';
+    const linkIcon = hasUrl ? ' ↗' : ' 🔍';
+    const onclick = `openNewsUrl(${JSON.stringify(a.url||'')}, ${JSON.stringify(a.title)})`;
     return `
-      <div class="news-card">
+      <div class="news-card" onclick="${onclick}" style="${cursor}" title="${hasUrl ? 'Ver artículo original' : 'Buscar en Google News'}">
         <span class="news-tag ${cls}" data-es="${labelES}" data-en="${labelEN}">${currentLang==='en'?labelEN:labelES}</span>
         <div class="news-body">
-          <div class="news-title">${a.title}</div>
+          <div class="news-title">${a.title}<span style="font-size:10px;color:var(--text3);margin-left:6px">${linkIcon}</span></div>
           <div class="news-meta">${src} · ${time}</div>
         </div>
       </div>`;
@@ -1558,10 +1611,13 @@ function renderNews(articles) {
     const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
     const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
-    return `<div class="news-card">
+    const hasUrl = a.url && a.url.startsWith('http');
+    const linkIcon = hasUrl ? ' ↗' : ' 🔍';
+    const onclick = `openNewsUrl(${JSON.stringify(a.url||'')}, ${JSON.stringify(a.title)})`;
+    return `<div class="news-card" onclick="${onclick}" style="cursor:pointer">
       <span class="news-tag ${cls}">${currentLang==='en'?labelEN:labelES}</span>
       <div class="news-body">
-        <div class="news-title">${a.title}</div>
+        <div class="news-title">${a.title}<span style="font-size:10px;color:var(--text3);margin-left:6px">${linkIcon}</span></div>
         <div class="news-meta">${a.source || 'IBICE'} · ${a.timeAgo || ''}</div>
       </div>
     </div>`;
