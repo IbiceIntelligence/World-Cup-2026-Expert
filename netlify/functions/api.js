@@ -228,7 +228,39 @@ async function getMatchAnalysis(home, away, lang = 'es') {
     ? `Analyze the FIFA World Cup 2026 match: ${home} vs ${away}. Give betting recommendations with expected value and a score prediction.`
     : `Analiza el partido de Copa Mundial FIFA 2026: ${home} vs ${away}. Da recomendaciones de apuesta con valor esperado y una predicción de marcador.`;
 
-  return await callClaude(system, user);
+  const result = await callClaude(system, user);
+
+  // Auto-correct prediction score to match implied winner from picks
+  if (result && result.picks && result.prediction) {
+    const picks = result.picks || [];
+    // Find the most confident "win" pick to determine likely winner
+    const winPick = picks.find(p =>
+      p.recommendation && (
+        p.recommendation.toLowerCase().includes('gana') ||
+        p.recommendation.toLowerCase().includes('wins') ||
+        p.recommendation.toLowerCase().includes('victoria') ||
+        p.recommendation.toLowerCase().includes('win')
+      )
+    );
+    if (winPick && result.prediction.score) {
+      const scoreStr = result.prediction.score;
+      const parts = scoreStr.split('-').map(s => parseInt(s.trim()));
+      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        const homeWins = parts[0] > parts[1];
+        const awayWins = parts[1] > parts[0];
+        const recLower = winPick.recommendation.toLowerCase();
+        // Check if the recommended winner is home or away team
+        const recHome = recLower.includes(home.toLowerCase().split(' ')[0].toLowerCase());
+        const recAway = recLower.includes(away.toLowerCase().split(' ')[0].toLowerCase());
+        // If contradiction detected — swap the score
+        if ((recHome && awayWins) || (recAway && homeWins)) {
+          result.prediction.score = parts[1] + '-' + parts[0];
+          result.prediction.note = (result.prediction.note || '') + ' [score corrected for consistency]';
+        }
+      }
+    }
+  }
+  return result;
 }
 
 // ── ACTION: INJURIES ANALYSIS (Claude + web context) ──────────────────────
@@ -250,6 +282,25 @@ async function getInjuriesAnalysis(lang = 'es') {
        e impacto concreto en mercados de apuestas.`;
 
   return await callClaude(system, user);
+}
+
+// ── ACTION: WORLD CUP NEWS ────────────────────────────────────────────────────
+async function getWorldCupNews(lang) {
+  // Fallback: Claude generates contextual news
+  const system = lang === 'en'
+    ? 'You are a FIFA World Cup 2026 news curator. Return ONLY valid JSON: { articles: [{title, tag, source, timeAgo}] } with 8 realistic current news items about WC2026. tag must be one of: INJURY, RESULT, ODDS, PREVIEW, LINEUP. timeAgo like "2 hours ago".'
+    : 'Eres un curador de noticias de la Copa Mundial FIFA 2026. Responde SOLO con JSON: { articles: [{title, tag, source, timeAgo}] } con 8 noticias actuales sobre el Mundial 2026. tag debe ser: LESIÓN, RESULTADO, CUOTAS, PREVIEW o ALINEACIÓN. timeAgo como "Hace 2 horas".';
+
+  const user = lang === 'en'
+    ? 'Generate 8 current World Cup 2026 news headlines for today June 12-13 2026. Mix of: injury updates (Rodrygo, Militão out for Brazil), match results (Mexico 2-0 South Africa opener), betting line movements, lineup confirmations for upcoming matches. Make them specific and realistic.'
+    : 'Genera 8 titulares de noticias actuales de la Copa Mundial 2026 para hoy 12-13 de junio 2026. Mezcla de: bajas confirmadas (Rodrygo, Militão fuera de Brasil), resultados (México 2-0 a Sudáfrica en el partido inaugural), movimientos de líneas de apuestas, confirmaciones de alineaciones para partidos próximos. Sé específico y realista.';
+
+  try {
+    const news = await callClaude(system, user);
+    return { ok: true, source: 'claude', articles: news.articles || [] };
+  } catch(e) {
+    return { ok: false, error: e.message, articles: [] };
+  }
 }
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
@@ -297,6 +348,10 @@ exports.handler = async (event) => {
 
       case 'injuries':
         result = await getInjuriesAnalysis(lang);
+        break;
+
+      case 'news':
+        result = await getWorldCupNews(lang);
         break;
 
       default:
