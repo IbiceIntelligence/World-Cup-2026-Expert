@@ -1574,10 +1574,19 @@ const NEWS_TAG_LABELS_EN = {
 
 function openNewsUrl(url, title) {
   if (url && url.startsWith('http')) {
+    // Real RSS article — open directly
     window.open(url, '_blank', 'noopener');
   } else {
-    const q = encodeURIComponent((title || '') + ' FIFA World Cup 2026');
-    window.open('https://news.google.com/search?q=' + q, '_blank', 'noopener');
+    // Claude-generated headline — search with shorter, more generic query
+    // Strip specific numbers/scores that would make query too specific
+    const cleanTitle = (title || '')
+      .replace(/\d+-\d+/g, '')           // remove scores
+      .replace(/\d{4}/g, '')         // remove years
+      .split(':')[0]                      // take only first part before colon
+      .trim()
+      .substring(0, 60);                 // max 60 chars
+    const q = encodeURIComponent(cleanTitle + ' World Cup 2026');
+    window.open('https://www.google.com/search?q=' + q + '&tbm=nws', '_blank', 'noopener');
   }
 }
 
@@ -1692,12 +1701,22 @@ async function loadLiveData() {
     console.error('weather error:', e);
   }
 
-  // 4. Live news from Claude AI
+  // 4. Live news from RSS feeds (real sources only)
   try {
     const res = await fetch(`${API}?action=news&lang=${currentLang}`);
     const data = await res.json();
-    if (data.ok && data.articles && data.articles.length) renderNews(data.articles);
-    else updateNewsDate();
+    if (data.ok && data.articles && data.articles.length) {
+      renderNews(data.articles);
+    } else {
+      // RSS unavailable — show "no news" message honestly
+      const noNewsMsg = currentLang === 'en'
+        ? 'Live news feeds temporarily unavailable. Check back shortly.'
+        : 'Fuentes de noticias en vivo temporalmente no disponibles. Intenta de nuevo en unos minutos.';
+      document.querySelectorAll('.news-grid').forEach(grid => {
+        grid.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">${noNewsMsg}</div>`;
+      });
+      updateNewsDate();
+    }
   } catch(e) {
     updateNewsDate();
   }
