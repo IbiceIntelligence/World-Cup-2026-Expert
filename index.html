@@ -1581,16 +1581,16 @@ function openNewsUrl(url, title) {
   }
 }
 
-// Global event delegation — catches ALL news-card clicks including hardcoded ones
+// Global event delegation — catches ALL news-card clicks
 document.addEventListener('click', function(e) {
   const card = e.target.closest('.news-card');
   if (!card) return;
-  // If card already has its own onclick, let it handle it
-  if (card.getAttribute('onclick')) return;
-  // Get title from card
+  // Read URL and title from data attributes (safe, no quote issues)
+  const url = card.getAttribute('data-news-url') || '';
   const titleEl = card.querySelector('.news-title');
-  const title = titleEl ? titleEl.textContent.replace(/[↗🔍]/g,'').trim() : '';
-  if (title) openNewsUrl(null, title);
+  const title = (card.getAttribute('data-news-title') ||
+    (titleEl ? titleEl.textContent.replace(/[↗🔍]/g,'').trim() : ''));
+  openNewsUrl(url, title);
 });
 
 function renderNews(articles) {
@@ -1602,11 +1602,11 @@ function renderNews(articles) {
     const src = a.source || 'IBICE Intelligence';
     const time = a.timeAgo || (currentLang === 'en' ? 'Just now' : 'Ahora');
     const hasUrl = a.url && a.url.startsWith('http');
-    const cursor = 'cursor:pointer';
     const linkIcon = hasUrl ? ' ↗' : ' 🔍';
-    const onclick = `openNewsUrl(${JSON.stringify(a.url||'')}, ${JSON.stringify(a.title)})`;
+    const safeUrl = (a.url||'').replace(/"/g,'&quot;');
+    const safeTitle = a.title.replace(/"/g,'&quot;');
     return `
-      <div class="news-card" onclick="${onclick}" style="${cursor}" title="${hasUrl ? 'Ver artículo original' : 'Buscar en Google News'}">
+      <div class="news-card" data-news-url="${safeUrl}" data-news-title="${safeTitle}" style="cursor:pointer">
         <span class="news-tag ${cls}" data-es="${labelES}" data-en="${labelEN}">${currentLang==='en'?labelEN:labelES}</span>
         <div class="news-body">
           <div class="news-title">${a.title}<span style="font-size:10px;color:var(--text3);margin-left:6px">${linkIcon}</span></div>
@@ -1624,8 +1624,9 @@ function renderNews(articles) {
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
     const hasUrl = a.url && a.url.startsWith('http');
     const linkIcon = hasUrl ? ' ↗' : ' 🔍';
-    const onclick = `openNewsUrl(${JSON.stringify(a.url||'')}, ${JSON.stringify(a.title)})`;
-    return `<div class="news-card" onclick="${onclick}" style="cursor:pointer">
+    const safeUrl = (a.url||'').replace(/"/g,'&quot;');
+    const safeTitle = a.title.replace(/"/g,'&quot;');
+    return `<div class="news-card" data-news-url="${safeUrl}" data-news-title="${safeTitle}" style="cursor:pointer">
       <span class="news-tag ${cls}">${currentLang==='en'?labelEN:labelES}</span>
       <div class="news-body">
         <div class="news-title">${a.title}<span style="font-size:10px;color:var(--text3);margin-left:6px">${linkIcon}</span></div>
