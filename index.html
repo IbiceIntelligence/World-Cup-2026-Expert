@@ -1576,11 +1576,22 @@ function openNewsUrl(url, title) {
   if (url && url.startsWith('http')) {
     window.open(url, '_blank', 'noopener');
   } else {
-    // Fallback: Google News search
-    const q = encodeURIComponent(title + ' FIFA World Cup 2026');
+    const q = encodeURIComponent((title || '') + ' FIFA World Cup 2026');
     window.open('https://news.google.com/search?q=' + q, '_blank', 'noopener');
   }
 }
+
+// Global event delegation — catches ALL news-card clicks including hardcoded ones
+document.addEventListener('click', function(e) {
+  const card = e.target.closest('.news-card');
+  if (!card) return;
+  // If card already has its own onclick, let it handle it
+  if (card.getAttribute('onclick')) return;
+  // Get title from card
+  const titleEl = card.querySelector('.news-title');
+  const title = titleEl ? titleEl.textContent.replace(/[↗🔍]/g,'').trim() : '';
+  if (title) openNewsUrl(null, title);
+});
 
 function renderNews(articles) {
   const html = articles.map(a => {
