@@ -329,60 +329,59 @@ async function parseRSS(url, sourceLabel, tagDefault) {
 async function getWorldCupNews(lang) {
   const articles = [];
 
-  // SOURCE 1: ESPN FC RSS
-  try {
-    const espn = await parseRSS('https://www.espn.com/espn/rss/soccer/news', 'ESPN FC', 'PREVIEW');
-    articles.push(...espn.slice(0, 4));
-  } catch(e) {}
+  // RSS sources — all free, no auth, real journalism
+  const RSS_SOURCES = [
+    { url: 'https://www.espn.com/espn/rss/soccer/news',          source: 'ESPN FC'    },
+    { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml',    source: 'BBC Sport'  },
+    { url: 'https://www.goal.com/feeds/en/news',                  source: 'Goal.com'   },
+    { url: 'https://www.fourfourtwo.com/rss',                     source: 'FourFourTwo'},
+    { url: 'https://www.skysports.com/rss/12040',                 source: 'Sky Sports' },
+  ];
 
-  // SOURCE 2: BBC Sport Football RSS
-  try {
-    const bbc = await parseRSS('https://feeds.bbci.co.uk/sport/football/rss.xml', 'BBC Sport', 'PREVIEW');
-    articles.push(...bbc.slice(0, 4));
-  } catch(e) {}
+  // Fetch all RSS sources in parallel with 6s timeout each
+  const results = await Promise.allSettled(
+    RSS_SOURCES.map(s => parseRSS(s.url, s.source, 'PREVIEW'))
+  );
 
-  // Deduplicate
+  results.forEach(r => {
+    if (r.status === 'fulfilled' && r.value.length) {
+      articles.push(...r.value);
+    }
+  });
+
+  // Deduplicate by title
   const seen = new Set();
   const unique = articles.filter(a => {
-    const key = a.title.slice(0, 40).toLowerCase();
+    const key = a.title.slice(0, 50).toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 8);
+  });
 
-  if (unique.length >= 4) {
-    return { ok: true, source: 'rss', articles: unique };
+  // Filter: prefer World Cup articles, but include any football news
+  const wcFirst = unique.filter(a =>
+    /world cup|mundial|fifa|wc2026|2026/i.test(a.title)
+  );
+  const otherFootball = unique.filter(a =>
+    !/world cup|mundial|fifa|wc2026|2026/i.test(a.title)
+  );
+
+  // Build final list: WC news first, fill with football news if needed
+  const final = [...wcFirst, ...otherFootball].slice(0, 8);
+
+  if (final.length > 0) {
+    return { ok: true, source: 'rss', articles: final };
   }
 
-  // FALLBACK: Claude with strict real fixture context
-  let fixtureContext = 'Mexico 2-0 South Africa (Jun 11). Upcoming: Canada vs Bosnia (Jun 12), USA vs Paraguay (Jun 12), Haiti vs Scotland (Jun 13), Australia vs Turkey (Jun 13), Brazil vs Morocco (Jun 13), Qatar vs Switzerland (Jun 13).';
-  try {
-    const fixtureData = await fetchJSON('https://worldcup26.ir/get/games');
-    const games = Array.isArray(fixtureData) ? fixtureData : fixtureData.games || [];
-    const finished = games.filter(g => g.finished === 'TRUE').slice(-4)
-      .map(g => g.home_team_name_en + ' ' + g.home_score + '-' + g.away_score + ' ' + g.away_team_name_en).join(', ');
-    const upcoming = games.filter(g => g.finished === 'FALSE' && g.time_elapsed === 'notstarted').slice(0, 6)
-      .map(g => g.home_team_name_en + ' vs ' + g.away_team_name_en).join(', ');
-    if (finished || upcoming) fixtureContext = (finished ? 'Results: ' + finished + '. ' : '') + (upcoming ? 'Upcoming: ' + upcoming : '');
-  } catch(e) {}
-
-  const injuries = 'Confirmed out: Rodrygo (Brazil-ACL), Militao (Brazil-hamstring), Xavi Simons (Netherlands-ACL), Foyth (Argentina-Achilles), Ekitike (France-Achilles), Mitoma (Japan-hamstring), Minamino (Japan-ACL), Malagon (Mexico-Achilles).';
-
-  const system = lang === 'en'
-    ? 'World Cup 2026 news curator. Return ONLY JSON: { articles: [{title,tag,source,timeAgo}] }. Tags: INJURY|RESULT|ODDS|PREVIEW|LINEUP. STRICT: only use teams/matchups from the prompt. Never invent fixtures.'
-    : 'Curador de noticias Mundial 2026. Solo JSON: { articles: [{title,tag,source,timeAgo}] }. Tags: LESION|RESULTADO|CUOTAS|PREVIEW|ALINEACION. ESTRICTO: solo equipos y partidos del prompt. Nunca inventes partidos.';
-
-  const user = lang === 'en'
-    ? 'Generate 8 WC2026 news using ONLY: ' + fixtureContext + ' ' + injuries + ' Sources: ESPN, BBC Sport, The Athletic, DraftKings.'
-    : 'Genera 8 noticias Mundial 2026 usando SOLO: ' + fixtureContext + ' ' + injuries + ' Fuentes: ESPN, FOX Sports, Marca, AS, TyC Sports.';
-
-  try {
-    const news = await callClaude(system, user);
-    return { ok: true, source: 'claude', articles: news.articles || [] };
-  } catch(e) {
-    return { ok: false, error: e.message, articles: [] };
-  }
+  // All RSS sources failed — return empty (no invented news)
+  return {
+    ok: false,
+    source: 'none',
+    articles: [],
+    error: 'All RSS sources unavailable. No news to display.'
+  };
 }
+
 
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
