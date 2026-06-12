@@ -285,15 +285,96 @@ async function getInjuriesAnalysis(lang = 'es') {
 }
 
 // ── ACTION: WORLD CUP NEWS ────────────────────────────────────────────────────
+// ── Parse RSS feed → articles array ──────────────────────────
+async function parseRSS(url, sourceLabel, tagDefault) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error('RSS fetch failed');
+    const xml = await res.text();
+    clearTimeout(timeout);
+    const items = [];
+    const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
+    let match;
+    while ((match = itemRegex.exec(xml)) !== null && items.length < 8) {
+      const block = match[1];
+      const title = (block.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) ||
+                     block.match(/<title>(.*?)<\/title>/))?.[1]?.trim();
+      const pubDate = (block.match(/<pubDate>(.*?)<\/pubDate>/))?.[1]?.trim();
+      const url = (block.match(/<link>(.*?)<\/link>/) ||
+                   block.match(/<guid[^>]*>(https?:\/\/[^<]+)<\/guid>/))?.[1]?.trim();
+      if (!title || title.length < 5) continue;
+      let timeAgo = 'Recently';
+      if (pubDate) {
+        const diff = Math.floor((Date.now() - new Date(pubDate).getTime()) / 60000);
+        if (diff < 60) timeAgo = diff + ' min ago';
+        else if (diff < 1440) timeAgo = Math.floor(diff/60) + ' hours ago';
+        else timeAgo = Math.floor(diff/1440) + ' days ago';
+      }
+      let tag = tagDefault;
+      if (/injur|lesion|out |baja|ruled out|miss/i.test(title)) tag = 'INJURY';
+      else if (/result|score|beats|wins|won|gana|derrota|[0-9]-[0-9]/i.test(title)) tag = 'RESULT';
+      else if (/odds|cuotas|betting|apuesta|favorite|line move/i.test(title)) tag = 'ODDS';
+      else if (/lineup|alineacion|starting|eleven|once inicial/i.test(title)) tag = 'LINEUP';
+      items.push({ title, tag, source: sourceLabel, timeAgo, url: url || null });
+    }
+    return items;
+  } catch(e) {
+    clearTimeout(timeout);
+    return [];
+  }
+}
+
 async function getWorldCupNews(lang) {
-  // Fallback: Claude generates contextual news
+  const articles = [];
+
+  // SOURCE 1: ESPN FC RSS
+  try {
+    const espn = await parseRSS('https://www.espn.com/espn/rss/soccer/news', 'ESPN FC', 'PREVIEW');
+    articles.push(...espn.slice(0, 4));
+  } catch(e) {}
+
+  // SOURCE 2: BBC Sport Football RSS
+  try {
+    const bbc = await parseRSS('https://feeds.bbci.co.uk/sport/football/rss.xml', 'BBC Sport', 'PREVIEW');
+    articles.push(...bbc.slice(0, 4));
+  } catch(e) {}
+
+  // Deduplicate
+  const seen = new Set();
+  const unique = articles.filter(a => {
+    const key = a.title.slice(0, 40).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 8);
+
+  if (unique.length >= 4) {
+    return { ok: true, source: 'rss', articles: unique };
+  }
+
+  // FALLBACK: Claude with strict real fixture context
+  let fixtureContext = 'Mexico 2-0 South Africa (Jun 11). Upcoming: Canada vs Bosnia (Jun 12), USA vs Paraguay (Jun 12), Haiti vs Scotland (Jun 13), Australia vs Turkey (Jun 13), Brazil vs Morocco (Jun 13), Qatar vs Switzerland (Jun 13).';
+  try {
+    const fixtureData = await fetchJSON('https://worldcup26.ir/get/games');
+    const games = Array.isArray(fixtureData) ? fixtureData : fixtureData.games || [];
+    const finished = games.filter(g => g.finished === 'TRUE').slice(-4)
+      .map(g => g.home_team_name_en + ' ' + g.home_score + '-' + g.away_score + ' ' + g.away_team_name_en).join(', ');
+    const upcoming = games.filter(g => g.finished === 'FALSE' && g.time_elapsed === 'notstarted').slice(0, 6)
+      .map(g => g.home_team_name_en + ' vs ' + g.away_team_name_en).join(', ');
+    if (finished || upcoming) fixtureContext = (finished ? 'Results: ' + finished + '. ' : '') + (upcoming ? 'Upcoming: ' + upcoming : '');
+  } catch(e) {}
+
+  const injuries = 'Confirmed out: Rodrygo (Brazil-ACL), Militao (Brazil-hamstring), Xavi Simons (Netherlands-ACL), Foyth (Argentina-Achilles), Ekitike (France-Achilles), Mitoma (Japan-hamstring), Minamino (Japan-ACL), Malagon (Mexico-Achilles).';
+
   const system = lang === 'en'
-    ? 'You are a FIFA World Cup 2026 news curator. Return ONLY valid JSON: { articles: [{title, tag, source, timeAgo}] } with 8 realistic current news items about WC2026. tag must be one of: INJURY, RESULT, ODDS, PREVIEW, LINEUP. timeAgo like "2 hours ago".'
-    : 'Eres un curador de noticias de la Copa Mundial FIFA 2026. Responde SOLO con JSON: { articles: [{title, tag, source, timeAgo}] } con 8 noticias actuales sobre el Mundial 2026. tag debe ser: LESIÓN, RESULTADO, CUOTAS, PREVIEW o ALINEACIÓN. timeAgo como "Hace 2 horas".';
+    ? 'World Cup 2026 news curator. Return ONLY JSON: { articles: [{title,tag,source,timeAgo}] }. Tags: INJURY|RESULT|ODDS|PREVIEW|LINEUP. STRICT: only use teams/matchups from the prompt. Never invent fixtures.'
+    : 'Curador de noticias Mundial 2026. Solo JSON: { articles: [{title,tag,source,timeAgo}] }. Tags: LESION|RESULTADO|CUOTAS|PREVIEW|ALINEACION. ESTRICTO: solo equipos y partidos del prompt. Nunca inventes partidos.';
 
   const user = lang === 'en'
-    ? 'Generate 8 current World Cup 2026 news headlines for today June 12-13 2026. Mix of: injury updates (Rodrygo, Militão out for Brazil), match results (Mexico 2-0 South Africa opener), betting line movements, lineup confirmations for upcoming matches. Make them specific and realistic.'
-    : 'Genera 8 titulares de noticias actuales de la Copa Mundial 2026 para hoy 12-13 de junio 2026. Mezcla de: bajas confirmadas (Rodrygo, Militão fuera de Brasil), resultados (México 2-0 a Sudáfrica en el partido inaugural), movimientos de líneas de apuestas, confirmaciones de alineaciones para partidos próximos. Sé específico y realista.';
+    ? 'Generate 8 WC2026 news using ONLY: ' + fixtureContext + ' ' + injuries + ' Sources: ESPN, BBC Sport, The Athletic, DraftKings.'
+    : 'Genera 8 noticias Mundial 2026 usando SOLO: ' + fixtureContext + ' ' + injuries + ' Fuentes: ESPN, FOX Sports, Marca, AS, TyC Sports.';
 
   try {
     const news = await callClaude(system, user);
@@ -302,6 +383,7 @@ async function getWorldCupNews(lang) {
     return { ok: false, error: e.message, articles: [] };
   }
 }
+
 
 // ── MAIN HANDLER ───────────────────────────────────────────────────────────
 exports.handler = async (event) => {
