@@ -465,20 +465,49 @@ main { padding: 24px; }
   <div>
     <div class="section-hdr">
       <h2 data-es="Top noticias" data-en="Top news">Top noticias</h2>
+      <span class="tag-live" id="dash-news-time">actualizado</span>
     </div>
-    <div class="news-grid">
+    <div class="news-grid" id="dash-news-grid">
       <div class="news-card">
-        <span class="news-tag nt-injury" data-es="Lesión" data-en="Injury">Lesión</span>
+        <span class="news-tag nt-injury">Lesión</span>
         <div class="news-body">
-          <div class="news-title" data-es="Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo" data-en="Rodrygo and Militão confirmed out: Brazil arrives with 4 absences">Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo</div>
-          <div class="news-meta">ESPN · <span data-es="Hace 2 horas" data-en="2 hours ago">Hace 2 horas</span></div>
+          <div class="news-title">Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo</div>
+          <div class="news-meta">ESPN · Hace 2 horas</div>
         </div>
       </div>
       <div class="news-card">
-        <span class="news-tag nt-odds" data-es="Odds" data-en="Odds">Odds</span>
+        <span class="news-tag nt-result">Resultado</span>
         <div class="news-body">
-          <div class="news-title" data-es="Las casas acortan a España tras la lista oficial: Yamal entra en la convocatoria" data-en="Books shorten Spain after official squad: Yamal makes the list">Las casas acortan a España tras la lista oficial: Yamal entra en la convocatoria</div>
-          <div class="news-meta">Marca · <span data-es="Hace 4 horas" data-en="4 hours ago">Hace 4 horas</span></div>
+          <div class="news-title" id="news-mex-rsa">México derrota a Sudáfrica en el partido inaugural del Azteca</div>
+          <div class="news-meta">FOX Sports · Hace 3 horas</div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-odds">Cuotas</span>
+        <div class="news-body">
+          <div class="news-title">Las casas acortan a España tras confirmarse Yamal en la convocatoria</div>
+          <div class="news-meta">Marca · Hace 4 horas</div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-injury">Lesión</span>
+        <div class="news-body">
+          <div class="news-title">Xavi Simons confirma que se pierde el Mundial tras rotura de LCA con el Tottenham</div>
+          <div class="news-meta">The Guardian · Hace 6 horas</div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-preview">Preview</span>
+        <div class="news-body">
+          <div class="news-title">Argentina vs Nigeria: Scaloni confirma que Messi y Di María arrancan en el once</div>
+          <div class="news-meta">TyC Sports · Hace 1 hora</div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-odds">Cuotas</span>
+        <div class="news-body">
+          <div class="news-title">Sharp money en Over 2.5 para Brasil vs Marruecos — línea se mueve a -130</div>
+          <div class="news-meta">Action Network · Hace 30 min</div>
         </div>
       </div>
     </div>
@@ -1522,14 +1551,31 @@ function renderNews(articles) {
       </div>`;
   }).join('');
 
-  // Update both news grids (dashboard top news + noticias view)
-  document.querySelectorAll('.news-grid').forEach(grid => {
-    grid.innerHTML = html;
-  });
+  // Update dashboard news grid (top 6)
+  const dashGrid2 = document.getElementById('dash-news-grid');
+  if (dashGrid2) dashGrid2.innerHTML = articles.slice(0, 6).map(a => {
+    const tagKey = (a.tag || 'NEWS').toUpperCase();
+    const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
+    const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
+    const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
+    return `<div class="news-card">
+      <span class="news-tag ${cls}">${currentLang==='en'?labelEN:labelES}</span>
+      <div class="news-body">
+        <div class="news-title">${a.title}</div>
+        <div class="news-meta">${a.source || 'IBICE'} · ${a.timeAgo || ''}</div>
+      </div>
+    </div>`;
+  }).join('');
 
-  // Update the "updated" tag
+  // Update full noticias view grid (all 8)
+  const noticiasGrid = document.querySelector('#view-noticias .news-grid');
+  if (noticiasGrid) noticiasGrid.innerHTML = html;
+
+  // Update timestamps
   const now = new Date();
   const timeStr = now.toLocaleTimeString(currentLang==='en'?'en-US':'es-ES', {hour:'2-digit',minute:'2-digit'});
+  const dashTime = document.getElementById('dash-news-time');
+  if (dashTime) dashTime.textContent = '● ' + timeStr;
   document.querySelectorAll('.tag-live').forEach(el => {
     if (el.closest('#view-noticias')) el.textContent = '● ' + timeStr;
   });
