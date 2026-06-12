@@ -312,11 +312,19 @@ async function parseRSS(url, sourceLabel, tagDefault) {
         else if (diff < 1440) timeAgo = Math.floor(diff/60) + ' hours ago';
         else timeAgo = Math.floor(diff/1440) + ' days ago';
       }
-      let tag = tagDefault;
-      if (/injur|lesion|out |baja|ruled out|miss/i.test(title)) tag = 'INJURY';
-      else if (/result|score|beats|wins|won|gana|derrota|[0-9]-[0-9]/i.test(title)) tag = 'RESULT';
-      else if (/odds|cuotas|betting|apuesta|favorite|line move/i.test(title)) tag = 'ODDS';
-      else if (/lineup|alineacion|starting|eleven|once inicial/i.test(title)) tag = 'LINEUP';
+      // Classify tag from title keywords
+      let tag = 'PREVIEW';
+      const t = title.toLowerCase();
+      if (/injur|ruled out|out for|misses|miss |pulled out|sidelined|baja|lesion|acl|hamstring|ankle|knee|tear|strain|absent|doubtful/.test(t))
+        tag = 'INJURY';
+      else if (/beats|beat |defeat|wins |won |victory|scores|scored|[0-9]-[0-9]|result|final score|equalise|equaliz|comeback|thrash|demolish|gana |derrota|resultado/.test(t))
+        tag = 'RESULT';
+      else if (/odds|betting|favorite|favourite|line move|wager|punt|bet |price|boost|drifts|shortens|cuotas|apuesta/.test(t))
+        tag = 'ODDS';
+      else if (/lineup|line-up|line up|starting|eleven|xi |squad|selected|named|picks|confirmed team|alineacion|convocatoria/.test(t))
+        tag = 'LINEUP';
+      else if (/preview|prediction|expect|preview|head-to-head|h2h|key battle|tactical|formation|analysis/.test(t))
+        tag = 'PREVIEW';
       items.push({ title, tag, source: sourceLabel, timeAgo, url: url || null });
     }
     return items;
