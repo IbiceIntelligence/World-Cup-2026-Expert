@@ -1,378 +1,1973 @@
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const APIFY_API_TOKEN   = process.env.APIFY_API_TOKEN;
-const MODEL = 'claude-sonnet-4-5';
-
-// ── HELPERS ────────────────────────────────────────────────────────────────
-
-async function callClaude(system, user) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 1200,
-      system,
-      messages: [{ role: 'user', content: user }],
-    }),
-  });
-  if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
-  const data = await res.json();
-  const text = data.content?.[0]?.text || '{}';
-  const clean = text.replace(/```json\n?|```/g, '').trim();
-  return JSON.parse(clean);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IBICE World Cup Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+:root {
+  --bg:        #0a0a0a;
+  --bg2:       #111111;
+  --bg3:       #181818;
+  --bg4:       #222222;
+  --gold:      #D4AF37;
+  --gold-dim:  #8a6f1a;
+  --gold-glow: rgba(212,175,55,0.15);
+  --gold-pale: rgba(212,175,55,0.07);
+  --text:      #f0ece0;
+  --text2:     #9a9488;
+  --text3:     #5a5650;
+  --border:    rgba(212,175,55,0.12);
+  --border2:   rgba(212,175,55,0.22);
+  --red:       #e05252;
+  --green:     #52c97a;
+  --blue:      #4a9eff;
+  --purple:    #9b72ef;
+  --radius:    10px;
+  --radius-lg: 14px;
 }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Space Grotesk', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+.mono { font-family: 'Space Mono', monospace; }
 
-// Generic JSON fetch with timeout
-async function fetchJSON(url, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(url, { ...options, signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } finally {
-    clearTimeout(timeout);
+/* ── NAV ── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(10,10,10,0.94); backdrop-filter: blur(16px);
+  border-bottom: 0.5px solid var(--border);
+  padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px; gap: 16px;
+}
+.nav-tabs { display: flex; gap: 2px; }
+.nav-tab {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; color: var(--text2);
+  border: none; background: transparent; transition: all 0.15s;
+}
+.nav-tab:hover { color: var(--text); background: var(--bg3); }
+.nav-tab.active { color: var(--gold); background: var(--gold-pale); }
+.nav-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.badge-free { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 10px; border-radius: 4px; background: var(--bg3); color: var(--text3); border: 0.5px solid var(--border); }
+.btn-upgrade { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 7px 16px; border-radius: 6px; cursor: pointer; background: var(--gold); color: #0a0a0a; border: none; transition: opacity 0.15s; white-space: nowrap; }
+.btn-upgrade:hover { opacity: 0.88; }
+
+/* Lang toggle */
+.lang-toggle { display: flex; background: var(--bg3); border: 0.5px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-btn { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 5px 10px; cursor: pointer; border: none; background: transparent; color: var(--text3); transition: all 0.15s; }
+.lang-btn.active { background: var(--gold-pale); color: var(--gold); }
+
+/* ── TICKER ── */
+.ticker-wrap { background: var(--bg2); border-bottom: 0.5px solid var(--border); padding: 7px 0; overflow: hidden; white-space: nowrap; }
+.ticker-inner { display: inline-flex; gap: 0; animation: tick 38s linear infinite; }
+.ticker-item { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-family: 'Space Mono', monospace; padding: 0 28px; color: var(--text2); border-right: 0.5px solid var(--border); }
+.ticker-item .team { color: var(--text); font-weight: 700; }
+.ticker-item .score { color: var(--gold); }
+.ticker-item .live { color: var(--red); font-size: 9px; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes tick { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── LAYOUT ── */
+.app-shell { display: grid; grid-template-columns: 204px 1fr; min-height: calc(100vh - 108px); }
+
+/* ── SIDEBAR ── */
+aside { background: var(--bg2); border-right: 0.5px solid var(--border); padding: 20px 0; position: sticky; top: 108px; height: calc(100vh - 108px); overflow-y: auto; }
+.aside-section { padding: 0 0 16px; }
+.aside-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text3); padding: 0 16px 8px; display: block; }
+.aside-item { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text2); padding: 8px 16px; cursor: pointer; transition: all 0.12s; border-left: 2px solid transparent; }
+.aside-item:hover { color: var(--text); background: var(--bg3); }
+.aside-item.active { color: var(--gold); border-left-color: var(--gold); background: var(--gold-pale); }
+.aside-item .lock-icon { margin-left: auto; font-size: 9px; color: var(--text3); }
+.aside-item .premium-dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); opacity: 0.7; }
+.aside-divider { height: 0.5px; background: var(--border); margin: 8px 16px; }
+
+/* ── MAIN ── */
+main { padding: 24px; }
+
+/* ── VIEWS (show/hide) ── */
+.view { display: none; flex-direction: column; gap: 20px; }
+.view.active { display: flex; }
+
+/* ── SECTION HEADER ── */
+.section-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.section-hdr h2 { font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+.section-hdr h2::before { content: ''; width: 2px; height: 14px; background: var(--gold); border-radius: 1px; }
+.tag-live { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 3px; background: rgba(224,82,82,0.15); color: var(--red); border: 0.5px solid rgba(224,82,82,0.25); animation: pulse 2s infinite; }
+.tag-premium { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 3px; background: var(--gold-pale); color: var(--gold); border: 0.5px solid var(--border2); }
+.tag-pro { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; padding: 2px 7px; border-radius: 3px; background: rgba(155,114,239,0.1); color: var(--purple); border: 0.5px solid rgba(155,114,239,0.2); }
+
+/* ── STATS STRIP ── */
+.stats-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.stat-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.stat-card .val { font-size: 24px; font-weight: 700; font-family: 'Space Mono', monospace; color: var(--gold); line-height: 1; }
+.stat-card .lbl { font-size: 10px; color: var(--text3); margin-top: 4px; letter-spacing: 0.04em; }
+
+/* ── MATCH CARDS ── */
+.matches-grid { display: flex; flex-direction: column; gap: 8px; }
+.match-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: 1fr auto 1fr auto; align-items: center; gap: 12px; cursor: pointer; transition: border-color 0.15s; }
+.match-card:hover { border-color: var(--border2); }
+.match-team { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.match-team.right { flex-direction: row-reverse; }
+.match-team .flag { font-size: 18px; }
+.match-score { text-align: center; font-family: 'Space Mono', monospace; font-size: 18px; font-weight: 700; color: var(--gold); min-width: 64px; }
+.match-score .time { font-size: 9px; color: var(--red); display: block; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.08em; }
+.match-score .venue { font-size: 9px; color: var(--text3); display: block; font-family: 'Space Grotesk', sans-serif; letter-spacing: 0.04em; }
+.match-odds { display: flex; gap: 5px; }
+.odd-btn { font-size: 10px; font-family: 'Space Mono', monospace; padding: 4px 8px; border-radius: 4px; cursor: pointer; background: var(--bg3); color: var(--text2); border: 0.5px solid var(--border); transition: all 0.12s; }
+.odd-btn:hover { border-color: var(--gold); color: var(--gold); }
+.odd-btn.value { border-color: rgba(82,201,122,0.4); color: var(--green); background: rgba(82,201,122,0.06); }
+.match-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.06em; }
+.mb-live { background: rgba(224,82,82,0.15); color: var(--red); }
+.mb-upcoming { background: var(--bg3); color: var(--text3); border: 0.5px solid var(--border); }
+
+/* ── GROUPS TABLE ── */
+.groups-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.group-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.group-header { background: var(--bg3); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid var(--border); }
+.group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--gold); }
+.group-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.group-table th { padding: 6px 10px; color: var(--text3); font-weight: 500; text-align: center; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+.group-table th:first-child { text-align: left; }
+.group-table td { padding: 7px 10px; border-top: 0.5px solid var(--border); text-align: center; color: var(--text2); }
+.group-table td:first-child { text-align: left; display: flex; align-items: center; gap: 6px; color: var(--text); font-weight: 500; }
+.group-table tr.qualified td { color: var(--gold); }
+.group-table tr.qualified td:first-child { color: var(--gold); }
+.pts-col { font-family: 'Space Mono', monospace; font-weight: 700; color: var(--text) !important; }
+
+/* ── NEWS ── */
+.news-grid { display: flex; flex-direction: column; gap: 10px; }
+.news-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; cursor: pointer; transition: border-color 0.15s; display: flex; gap: 14px; align-items: flex-start; }
+.news-card:hover { border-color: var(--border2); }
+.news-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+.nt-injury { background: rgba(224,82,82,0.12); color: var(--red); }
+.nt-odds { background: rgba(212,175,55,0.1); color: var(--gold); }
+.nt-result { background: rgba(82,201,122,0.1); color: var(--green); }
+.nt-preview { background: rgba(74,158,255,0.1); color: var(--blue); }
+.news-body { flex: 1; }
+.news-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; line-height: 1.4; }
+.news-meta { font-size: 10px; color: var(--text3); }
+
+/* ── PREMIUM MODULES ── */
+.premium-module { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.pm-header { padding: 14px 18px 12px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--bg3); }
+.pm-title { font-size: 13px; font-weight: 600; letter-spacing: 0.06em; }
+.pm-body { padding: 16px 18px; position: relative; }
+
+/* ── PAYWALL ── */
+.paywall-wrap { position: relative; }
+.blurred-content { filter: blur(6px); user-select: none; pointer-events: none; opacity: 0.6; }
+.paywall-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 0%, rgba(10,10,10,0.6) 30%, rgba(10,10,10,0.97) 62%); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 28px 20px 20px; gap: 14px; }
+.paywall-icon { font-size: 28px; margin-bottom: 2px; }
+.paywall-headline { font-size: 16px; font-weight: 700; color: var(--text); text-align: center; }
+.paywall-sub { font-size: 12px; color: var(--text2); text-align: center; line-height: 1.5; max-width: 320px; }
+.paywall-plans { display: flex; gap: 10px; width: 100%; max-width: 380px; }
+.plan-btn { flex: 1; padding: 11px 10px; border-radius: var(--radius); cursor: pointer; font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 600; transition: all 0.15s; text-align: center; border: 0.5px solid; }
+.plan-btn.primary { background: var(--gold); color: #0a0a0a; border-color: var(--gold); }
+.plan-btn.primary:hover { opacity: 0.88; }
+.plan-btn.secondary { background: transparent; color: var(--text2); border-color: var(--border2); }
+.plan-btn.secondary:hover { color: var(--text); border-color: var(--gold); }
+.plan-price { font-size: 10px; font-weight: 400; color: rgba(10,10,10,0.55); display: block; margin-top: 1px; }
+.plan-price.light { color: var(--text3); }
+.paywall-trust { font-size: 10px; color: var(--text3); }
+
+/* ── BLURRED ROWS ── */
+.fake-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 0.5px solid var(--border); }
+.fake-row:last-child { border-bottom: none; }
+.fake-flag-name { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.fake-tag { font-size: 11px; padding: 3px 9px; border-radius: 4px; font-family: 'Space Mono', monospace; }
+.tag-red { background: rgba(224,82,82,0.12); color: var(--red); }
+.tag-amber { background: rgba(212,175,55,0.1); color: var(--gold); }
+.tag-green { background: rgba(82,201,122,0.1); color: var(--green); }
+.fake-impact { font-size: 11px; color: var(--text2); }
+
+/* ── CLIMA ── */
+.clima-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.clima-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.clima-venue { font-size: 10px; color: var(--text3); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.clima-temp { font-size: 22px; font-weight: 700; font-family: 'Space Mono', monospace; color: var(--text); }
+.clima-temp span { font-size: 12px; color: var(--text2); font-family: 'Space Grotesk', sans-serif; }
+.clima-row { display: flex; gap: 10px; margin-top: 6px; font-size: 10px; color: var(--text3); }
+.clima-alert { font-size: 10px; margin-top: 6px; padding: 3px 7px; border-radius: 3px; display: inline-block; }
+.alert-hot { background: rgba(224,82,82,0.1); color: var(--red); }
+.alert-ok { background: rgba(82,201,122,0.08); color: var(--green); }
+.alert-wind { background: rgba(74,158,255,0.1); color: var(--blue); }
+
+/* ── ÁRBITROS ── */
+.ref-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 14px 16px; display: grid; grid-template-columns: 1fr repeat(4,auto); align-items: center; gap: 16px; margin-bottom: 8px; }
+.ref-name { font-size: 13px; font-weight: 600; }
+.ref-country { font-size: 10px; color: var(--text3); margin-top: 2px; }
+.ref-stat { text-align: center; }
+.ref-stat .val { font-size: 16px; font-weight: 700; font-family: 'Space Mono', monospace; }
+.ref-stat .val.hot { color: var(--red); }
+.ref-stat .val.ok { color: var(--green); }
+.ref-stat .val.warn { color: var(--gold); }
+.ref-stat .lbl { font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+/* ── PRICING ── */
+.pricing-section { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+.pricing-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 20px; }
+.price-card { background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 22px 18px; position: relative; overflow: hidden; }
+.price-card.featured { border-color: var(--gold); background: linear-gradient(135deg, var(--bg3) 60%, rgba(212,175,55,0.04)); }
+.price-card.featured::after { content: attr(data-badge); position: absolute; top: 14px; right: -22px; background: var(--gold); color: #0a0a0a; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; padding: 3px 32px; transform: rotate(45deg); }
+.price-tier { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+.price-amount { font-size: 32px; font-weight: 700; font-family: 'Space Mono', monospace; color: var(--text); line-height: 1; }
+.price-amount sup { font-size: 16px; color: var(--text2); }
+.price-amount sub { font-size: 13px; color: var(--text3); font-family: 'Space Grotesk', sans-serif; font-weight: 400; }
+.price-desc { font-size: 11px; color: var(--text3); margin: 8px 0 16px; line-height: 1.5; }
+.price-features { list-style: none; display: flex; flex-direction: column; gap: 7px; margin-bottom: 18px; }
+.price-features li { font-size: 11px; color: var(--text2); display: flex; align-items: flex-start; gap: 7px; line-height: 1.4; }
+.feat-check { color: var(--gold); flex-shrink: 0; }
+.feat-lock { color: var(--text3); flex-shrink: 0; }
+.price-btn { width: 100%; padding: 10px; border-radius: var(--radius); font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; border: 0.5px solid; transition: all 0.15s; }
+.price-btn.gold { background: var(--gold); color: #0a0a0a; border-color: var(--gold); }
+.price-btn.gold:hover { opacity: 0.88; }
+.price-btn.outline { background: transparent; color: var(--text2); border-color: var(--border2); }
+.price-btn.outline:hover { color: var(--text); border-color: var(--gold); }
+
+/* ── TABS (match day filter) ── */
+.tab-bar { display: flex; gap: 2px; background: var(--bg3); padding: 3px; border-radius: 8px; width: fit-content; }
+.tab-item { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; padding: 5px 14px; border-radius: 6px; cursor: pointer; color: var(--text3); border: none; background: transparent; transition: all 0.12s; }
+.tab-item.active { background: var(--bg2); color: var(--text); border: 0.5px solid var(--border); }
+
+/* ── PORT ROWS ── */
+.port-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 0.5px solid var(--border); font-size: 12px; }
+.port-row:last-child { border-bottom: none; }
+.port-match { color: var(--text); font-weight: 500; }
+.port-meta { color: var(--text3); font-size: 10px; font-family: 'Space Mono', monospace; }
+.port-result { font-family: 'Space Mono', monospace; font-size: 12px; }
+.port-result.win { color: var(--green); }
+.port-result.loss { color: var(--red); }
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* i18n hidden */
+[data-en], [data-es] {}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  nav { padding: 0 12px; height: 52px; gap: 8px; }
+  .nav-tabs { display: none; }
+  .nav-right { gap: 6px; }
+  .badge-free { display: none; }
+  .btn-upgrade { padding: 6px 10px; font-size: 10px; }
+  nav > div:first-child span:last-child { display: none; } /* hide subtitle */
+  nav > div:first-child > div:first-child { width: 36px; height: 36px; }
+
+  .app-shell { grid-template-columns: 1fr; }
+  aside {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    position: static; height: auto; overflow: visible;
+    padding: 8px 0; border-right: none;
+    border-bottom: 0.5px solid var(--border);
   }
-}
-
-// ── VENUE → COORDINATES MAP ────────────────────────────────────────────────
-const VENUE_COORDS = {
-  dallas:      { lat: 32.7473,  lon: -97.0945,  name: 'AT&T Stadium · Dallas'      },
-  newjersey:   { lat: 40.8135,  lon: -74.0745,  name: 'MetLife Stadium · New Jersey'},
-  miami:       { lat: 25.9580,  lon: -80.2389,  name: 'Hard Rock Stadium · Miami'  },
-  losangeles:  { lat: 34.0141,  lon: -118.2879, name: 'SoFi Stadium · Los Angeles' },
-  houston:     { lat: 29.6847,  lon: -95.4107,  name: 'NRG Stadium · Houston'      },
-  seattle:     { lat: 47.5952,  lon: -122.3316, name: 'Lumen Field · Seattle'      },
-  sanfrancisco:{ lat: 37.4032,  lon: -121.9698, name: "Levi's Stadium · San Jose"  },
-  kansascity:  { lat: 39.0489,  lon: -94.4839,  name: 'Arrowhead Stadium · Kansas City'},
-  boston:      { lat: 42.0909,  lon: -71.2643,  name: 'Gillette Stadium · Boston'  },
-  philadelphia:{ lat: 39.9008,  lon: -75.1675,  name: 'Lincoln Financial · Philadelphia'},
-  atlanta:     { lat: 33.7554,  lon: -84.4008,  name: 'Mercedes-Benz Stadium · Atlanta'},
-  vancouver:   { lat: 49.2769,  lon: -123.1116, name: 'BC Place · Vancouver'       },
-  toronto:     { lat: 43.6333,  lon: -79.4189,  name: 'BMO Field · Toronto'        },
-  guadalajara: { lat: 20.6597,  lon: -103.3496, name: 'Estadio Akron · Guadalajara'},
-  monterrey:   { lat: 25.6694,  lon: -100.3099, name: 'Estadio BBVA · Monterrey'   },
-  cdmx:        { lat: 19.3029,  lon: -99.1505,  name: 'Estadio Azteca · CDMX'      },
-};
-
-// ── ACTION: FIXTURES ───────────────────────────────────────────────────────
-// Source: worldcup26.ir — free, no auth required
-async function getFixtures() {
-  try {
-    const data = await fetchJSON('https://worldcup26.ir/get/games');
-    // Normalize to our format
-    const matches = (Array.isArray(data) ? data : data.games || data.matches || [])
-      .slice(0, 48)
-      .map(m => ({
-        id:        m._id || m.id,
-        home:      { name: m.home_team_name_en || m.home_team_name_fa || '' },
-        away:      { name: m.away_team_name_en || m.away_team_name_fa || '' },
-        homeScore: m.home_score ?? null,
-        awayScore: m.away_score ?? null,
-        status:    m.finished === 'TRUE' ? 'finished'
-                 : (m.time_elapsed && m.time_elapsed !== 'notstarted') ? 'live'
-                 : 'scheduled',
-        date:      m.local_date || m.date || null,
-        venue:     m.stadium_id ? 'Stadium ' + m.stadium_id : null,
-        group:     m.group || null,
-        matchday:  m.matchday || null,
-        minute:    (m.time_elapsed && m.time_elapsed !== 'notstarted') ? m.time_elapsed : null,
-      }));
-    return { ok: true, matches };
-  } catch (e) {
-    return { ok: false, error: e.message, matches: [] };
+  .aside-section { padding: 0; display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 8px; }
+  .aside-label { display: none; }
+  .aside-divider { display: none; }
+  .aside-item {
+    padding: 6px 10px; border-left: none; border-radius: 6px;
+    font-size: 11px; border-bottom: 2px solid transparent;
   }
+  .aside-item.active { border-left: none; border-bottom-color: var(--gold); background: var(--gold-pale); }
+  .aside-item .premium-dot { display: none; }
+  .aside-item .lock-icon { display: none; }
+
+  main { padding: 12px; }
+  .stats-strip { grid-template-columns: 1fr 1fr; }
+  .match-card { grid-template-columns: 1fr auto 1fr; gap: 6px; padding: 10px 12px; }
+  .match-odds { display: none; }
+  .match-team { font-size: 12px; }
+  .groups-wrap { grid-template-columns: 1fr; }
+  .pricing-grid { grid-template-columns: 1fr; }
+  .ref-card { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .clima-grid { grid-template-columns: 1fr; }
+  .paywall-plans { flex-direction: column; }
+  .drawer { width: 100vw; }
+  .pick-row { grid-template-columns: 1fr auto; }
+  .pick-ev { display: none; }
 }
+@media (max-width: 480px) {
+  nav > div:first-child span:first-child { font-size: 14px; letter-spacing: 0.08em; }
+  .stats-strip { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-card .val { font-size: 20px; }
+}
+</style>
+</head>
+<body>
 
-// ── ACTION: GROUPS ─────────────────────────────────────────────────────────
-// Source: worldcup26.ir — crosses fixtures to resolve team names from IDs
-async function getGroups() {
-  try {
-    // Fetch both in parallel
-    const [groupData, fixtureData] = await Promise.all([
-      fetchJSON('https://worldcup26.ir/get/groups'),
-      fetchJSON('https://worldcup26.ir/get/games'),
-    ]);
+<!-- NAV -->
+<nav>
+  <!-- LOGO -->
+  <div style="display:flex;align-items:center;gap:12px;flex-shrink:0;">
+    <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(145deg,#b8922a 0%,#7a5c14 55%,#4a3608 100%);border:0.5px solid rgba(212,175,55,0.3);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(212,175,55,0.2),0 2px 8px rgba(0,0,0,0.5);">
+      <span style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#0a0a0a;letter-spacing:0.04em;">IBI</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px;">
+      <span style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;color:#C9A84C;letter-spacing:0.13em;line-height:1;text-transform:uppercase;">IBICE INTELLIGENCE</span>
+      <span style="font-family:'Space Grotesk',sans-serif;font-size:9px;font-weight:400;color:#5a5650;letter-spacing:0.22em;text-transform:uppercase;line-height:1;">WORLD CUP FIFA 2026</span>
+    </div>
+  </div>
 
-    // Build team_id → name map from fixtures
-    const teamMap = {};
-    const games = Array.isArray(fixtureData) ? fixtureData : fixtureData.games || [];
-    games.forEach(g => {
-      if (g.home_team_id && g.home_team_name_en) teamMap[String(g.home_team_id)] = g.home_team_name_en;
-      if (g.away_team_id && g.away_team_name_en) teamMap[String(g.away_team_id)] = g.away_team_name_en;
+  <!-- NAV TABS -->
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showView('dashboard',this)" data-es="Dashboard" data-en="Dashboard">Dashboard</button>
+    <button class="nav-tab" onclick="showView('partidos',this)" data-es="Partidos" data-en="Matches">Partidos</button>
+    <button class="nav-tab" onclick="showView('grupos',this)" data-es="Grupos" data-en="Groups">Grupos</button>
+    <button class="nav-tab" onclick="showView('noticias',this)" data-es="Noticias" data-en="News">Noticias</button>
+    <button class="nav-tab" onclick="showView('premium',this)" data-es="Premium" data-en="Premium">Premium</button>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="nav-right">
+    <div class="lang-toggle">
+      <button class="lang-btn active" onclick="setLang('es',this)">ES</button>
+      <button class="lang-btn" onclick="setLang('en',this)">EN</button>
+    </div>
+    <span class="badge-free" data-es="Plan Free" data-en="Free Plan">Plan Free</span>
+    <button class="btn-upgrade" onclick="showView('premium',null)" data-es="Upgrade →" data-en="Upgrade →">Upgrade →</button>
+  </div>
+</nav>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker-inner">
+    <div class="ticker-item"><span style="font-size:14px">🇧🇷</span><span class="team">BRA</span><span class="score">2-0</span><span style="font-size:14px">🇲🇦</span><span class="team">MAR</span><span class="live">● LIVE 67'</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇺🇸</span><span class="team">USA</span><span class="score">1-1</span><span style="font-size:14px">🇵🇾</span><span class="team">PAR</span><span class="live">● LIVE 45'</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇲🇽</span><span class="team">MEX</span><span class="score">3-0</span><span style="font-size:14px">🇿🇦</span><span class="team">RSA</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇦🇷</span><span class="team">ARG</span><span class="score">vs</span><span style="font-size:14px">🇳🇬</span><span class="team">NGA</span> · 18:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇪🇸</span><span class="team">ESP</span><span class="score">vs</span><span style="font-size:14px">🇺🇾</span><span class="team">URU</span> · 21:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇫🇷</span><span class="team">FRA</span><span class="score">vs</span><span style="font-size:14px">🇯🇵</span><span class="team">JPN</span> · 21:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇩🇪</span><span class="team">GER</span><span class="score">vs</span><span style="font-size:14px">🇵🇹</span><span class="team">POR</span> · 15:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span><span class="team">ENG</span><span class="score">1-0</span><span style="font-size:14px">🇸🇳</span><span class="team">SEN</span></div>
+    <!-- duplicate -->
+    <div class="ticker-item"><span style="font-size:14px">🇧🇷</span><span class="team">BRA</span><span class="score">2-0</span><span style="font-size:14px">🇲🇦</span><span class="team">MAR</span><span class="live">● LIVE 67'</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇺🇸</span><span class="team">USA</span><span class="score">1-1</span><span style="font-size:14px">🇵🇾</span><span class="team">PAR</span><span class="live">● LIVE 45'</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇲🇽</span><span class="team">MEX</span><span class="score">3-0</span><span style="font-size:14px">🇿🇦</span><span class="team">RSA</span></div>
+    <div class="ticker-item"><span style="font-size:14px">🇦🇷</span><span class="team">ARG</span><span class="score">vs</span><span style="font-size:14px">🇳🇬</span><span class="team">NGA</span> · 18:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇪🇸</span><span class="team">ESP</span><span class="score">vs</span><span style="font-size:14px">🇺🇾</span><span class="team">URU</span> · 21:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇫🇷</span><span class="team">FRA</span><span class="score">vs</span><span style="font-size:14px">🇯🇵</span><span class="team">JPN</span> · 21:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🇩🇪</span><span class="team">GER</span><span class="score">vs</span><span style="font-size:14px">🇵🇹</span><span class="team">POR</span> · 15:00 ET</div>
+    <div class="ticker-item"><span style="font-size:14px">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span><span class="team">ENG</span><span class="score">1-0</span><span style="font-size:14px">🇸🇳</span><span class="team">SEN</span></div>
+  </div>
+</div>
+
+<!-- APP SHELL -->
+<div class="app-shell">
+
+<!-- SIDEBAR -->
+<aside>
+  <div class="aside-section">
+    <span class="aside-label" data-es="Gratis" data-en="Free">Gratis</span>
+    <div class="aside-item active" id="sb-dashboard" onclick="showView('dashboard',null)">
+      <i class="ti ti-layout-dashboard" aria-hidden="true"></i>
+      <span data-es="Dashboard" data-en="Dashboard">Dashboard</span>
+    </div>
+    <div class="aside-item" id="sb-partidos" onclick="showView('partidos',null)">
+      <i class="ti ti-calendar-event" aria-hidden="true"></i>
+      <span data-es="Partidos" data-en="Matches">Partidos</span>
+    </div>
+    <div class="aside-item" id="sb-grupos" onclick="showView('grupos',null)">
+      <i class="ti ti-tournament" aria-hidden="true"></i>
+      <span data-es="Grupos" data-en="Groups">Grupos</span>
+    </div>
+    <div class="aside-item" id="sb-noticias" onclick="showView('noticias',null)">
+      <i class="ti ti-news" aria-hidden="true"></i>
+      <span data-es="Noticias" data-en="News">Noticias</span>
+    </div>
+  </div>
+  <div class="aside-divider"></div>
+  <div class="aside-section">
+    <span class="aside-label">Premium</span>
+    <div class="aside-item" onclick="showView('premium',null);setTimeout(()=>document.getElementById('bajas').scrollIntoView({behavior:'smooth'}),80)">
+      <i class="ti ti-activity-heartbeat" aria-hidden="true"></i>
+      <span data-es="Bajas e impacto" data-en="Injuries & impact">Bajas e impacto</span>
+      <span class="premium-dot"></span>
+    </div>
+    <div class="aside-item" onclick="showView('premium',null);setTimeout(()=>document.getElementById('clima').scrollIntoView({behavior:'smooth'}),80)">
+      <i class="ti ti-cloud" aria-hidden="true"></i>
+      <span data-es="Clima y logística" data-en="Weather & travel">Clima y logística</span>
+      <span class="premium-dot"></span>
+    </div>
+    <div class="aside-item" onclick="showView('premium',null);setTimeout(()=>document.getElementById('arbitros').scrollIntoView({behavior:'smooth'}),80)">
+      <i class="ti ti-user-check" aria-hidden="true"></i>
+      <span data-es="Árbitros" data-en="Referees">Árbitros</span>
+      <span class="premium-dot"></span>
+    </div>
+    <div class="aside-item" onclick="showView('premium',null);setTimeout(()=>document.getElementById('crowd').scrollIntoView({behavior:'smooth'}),80)">
+      <i class="ti ti-chart-line" aria-hidden="true"></i>
+      <span data-es="Crowd vs Casas" data-en="Crowd vs Books">Crowd vs Casas</span>
+      <span class="premium-dot"></span>
+    </div>
+    <div class="aside-item" onclick="showView('premium',null);setTimeout(()=>document.getElementById('portfolio').scrollIntoView({behavior:'smooth'}),80)">
+      <i class="ti ti-wallet" aria-hidden="true"></i>
+      <span data-es="Mi portafolio" data-en="My portfolio">Mi portafolio</span>
+      <span class="premium-dot"></span>
+    </div>
+  </div>
+  <div class="aside-divider"></div>
+  <div class="aside-section">
+    <span class="aside-label">Pro</span>
+    <div class="aside-item">
+      <i class="ti ti-arrows-exchange" aria-hidden="true"></i>
+      <span data-es="Arb detector" data-en="Arb detector">Arb detector</span>
+      <span class="lock-icon">🔒</span>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main>
+
+<!-- ═══════════════════════════════════ VIEW: DASHBOARD ═══════════════════════════════════ -->
+<div id="view-dashboard" class="view active">
+
+  <div>
+    <div class="section-hdr">
+      <h2><span data-es="Resumen del torneo" data-en="Tournament overview">Resumen del torneo</span> <span class="tag-live" data-es="en vivo" data-en="live">en vivo</span></h2>
+    </div>
+    <div class="stats-strip">
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Partidos jugados" data-en="Matches played">Partidos jugados</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Goles anotados" data-en="Goals scored">Goles anotados</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Promedio goles" data-en="Avg goals">Promedio goles</div></div>
+      <div class="stat-card"><div class="val mono">—</div><div class="lbl" data-es="Partidos hoy" data-en="Matches today">Partidos hoy</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-hdr">
+      <h2 data-es="Partidos del día" data-en="Today's matches">Partidos del día</h2>
+    </div>
+    <div class="matches-grid">
+      <div class="match-card">
+        <div class="match-team"><span class="flag" style="font-size:18px">🇧🇷</span> <span data-es="Brasil" data-en="Brazil">Brasil</span></div>
+        <div class="match-score"><span class="time">● 67'</span>2 – 0</div>
+        <div class="match-team right"><span class="flag" style="font-size:18px">🇲🇦</span> <span data-es="Marruecos" data-en="Morocco">Marruecos</span></div>
+        <div class="match-odds"><button class="odd-btn value">-180</button><button class="odd-btn">+340</button><button class="odd-btn">+260</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span class="flag" style="font-size:18px">🇦🇷</span> <span data-es="Argentina" data-en="Argentina">Argentina</span></div>
+        <div class="match-score"><span class="venue" data-es="18:00 ET · Dallas" data-en="18:00 ET · Dallas">18:00 ET · Dallas</span>vs</div>
+        <div class="match-team right"><span class="flag" style="font-size:18px">🇳🇬</span> <span data-es="Nigeria" data-en="Nigeria">Nigeria</span></div>
+        <div class="match-odds"><button class="odd-btn">-220</button><button class="odd-btn">+480</button><button class="odd-btn">+310</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span class="flag" style="font-size:18px">🇪🇸</span> <span data-es="España" data-en="Spain">España</span></div>
+        <div class="match-score"><span class="venue" data-es="21:00 ET · Miami" data-en="21:00 ET · Miami">21:00 ET · Miami</span>vs</div>
+        <div class="match-team right"><span class="flag" style="font-size:18px">🇺🇾</span> <span data-es="Uruguay" data-en="Uruguay">Uruguay</span></div>
+        <div class="match-odds"><button class="odd-btn value">-165</button><button class="odd-btn">+380</button><button class="odd-btn">+290</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-hdr">
+      <h2 data-es="Top noticias" data-en="Top news">Top noticias</h2>
+    </div>
+    <div class="news-grid">
+      <div class="news-card">
+        <span class="news-tag nt-injury" data-es="Lesión" data-en="Injury">Lesión</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo" data-en="Rodrygo and Militão confirmed out: Brazil arrives with 4 absences">Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo</div>
+          <div class="news-meta">ESPN · <span data-es="Hace 2 horas" data-en="2 hours ago">Hace 2 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-odds" data-es="Odds" data-en="Odds">Odds</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Las casas acortan a España tras la lista oficial: Yamal entra en la convocatoria" data-en="Books shorten Spain after official squad: Yamal makes the list">Las casas acortan a España tras la lista oficial: Yamal entra en la convocatoria</div>
+          <div class="news-meta">Marca · <span data-es="Hace 4 horas" data-en="4 hours ago">Hace 4 horas</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════ VIEW: PARTIDOS ═══════════════════════════════════ -->
+<div id="view-partidos" class="view">
+
+  <div>
+    <div class="section-hdr">
+      <h2 data-es="Todos los partidos" data-en="All matches">Todos los partidos</h2>
+      <div class="tab-bar">
+        <button class="tab-item active" data-es="Hoy" data-en="Today">Hoy</button>
+        <button class="tab-item" data-es="Mañana" data-en="Tomorrow">Mañana</button>
+        <button class="tab-item" data-es="Semana" data-en="Week">Semana</button>
+      </div>
+    </div>
+
+    <div style="font-size:10px;color:var(--text3);margin-bottom:10px;letter-spacing:0.06em;text-transform:uppercase;" data-es="Jue 11 Jun — Jornada 1" data-en="Thu Jun 11 — Matchday 1">Jue 11 Jun — Jornada 1</div>
+    <div class="matches-grid">
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇲🇽</span> <span data-es="México" data-en="Mexico">México</span></div>
+        <div class="match-score">3 – 0</div>
+        <div class="match-team right"><span style="font-size:18px">🇿🇦</span> <span data-es="Sudáfrica" data-en="South Africa">Sudáfrica</span></div>
+        <div class="match-odds"><button class="odd-btn value">FT</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span> <span data-es="Inglaterra" data-en="England">Inglaterra</span></div>
+        <div class="match-score">1 – 0</div>
+        <div class="match-team right"><span style="font-size:18px">🇸🇳</span> <span data-es="Senegal" data-en="Senegal">Senegal</span></div>
+        <div class="match-odds"><button class="odd-btn value">FT</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇧🇷</span> <span data-es="Brasil" data-en="Brazil">Brasil</span></div>
+        <div class="match-score"><span class="time">● 67'</span>2 – 0</div>
+        <div class="match-team right"><span style="font-size:18px">🇲🇦</span> <span data-es="Marruecos" data-en="Morocco">Marruecos</span></div>
+        <div class="match-odds"><button class="odd-btn">-180</button><button class="odd-btn">+340</button><button class="odd-btn">+260</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇺🇸</span> <span data-es="Estados Unidos" data-en="United States">Estados Unidos</span></div>
+        <div class="match-score"><span class="time">● 45'</span>1 – 1</div>
+        <div class="match-team right"><span style="font-size:18px">🇵🇾</span> <span data-es="Paraguay" data-en="Paraguay">Paraguay</span></div>
+        <div class="match-odds"><button class="odd-btn">-130</button><button class="odd-btn">+360</button><button class="odd-btn">+310</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇦🇷</span> <span data-es="Argentina" data-en="Argentina">Argentina</span></div>
+        <div class="match-score"><span class="venue">18:00 ET</span>vs</div>
+        <div class="match-team right"><span style="font-size:18px">🇳🇬</span> Nigeria</div>
+        <div class="match-odds"><button class="odd-btn">-220</button><button class="odd-btn">+480</button><button class="odd-btn">+310</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇩🇪</span> <span data-es="Alemania" data-en="Germany">Alemania</span></div>
+        <div class="match-score"><span class="venue">15:00 ET</span>vs</div>
+        <div class="match-team right"><span style="font-size:18px">🇵🇹</span> <span data-es="Portugal" data-en="Portugal">Portugal</span></div>
+        <div class="match-odds"><button class="odd-btn">+115</button><button class="odd-btn">+240</button><button class="odd-btn value">+230</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇪🇸</span> <span data-es="España" data-en="Spain">España</span></div>
+        <div class="match-score"><span class="venue">21:00 ET</span>vs</div>
+        <div class="match-team right"><span style="font-size:18px">🇺🇾</span> Uruguay</div>
+        <div class="match-odds"><button class="odd-btn value">-165</button><button class="odd-btn">+380</button><button class="odd-btn">+290</button></div>
+      </div>
+      <div class="match-card">
+        <div class="match-team"><span style="font-size:18px">🇫🇷</span> <span data-es="Francia" data-en="France">Francia</span></div>
+        <div class="match-score"><span class="venue">21:00 ET</span>vs</div>
+        <div class="match-team right"><span style="font-size:18px">🇯🇵</span> <span data-es="Japón" data-en="Japan">Japón</span></div>
+        <div class="match-odds"><button class="odd-btn">-200</button><button class="odd-btn">+520</button><button class="odd-btn">+330</button></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════ VIEW: GRUPOS ═══════════════════════════════════ -->
+<div id="view-grupos" class="view">
+
+  <div>
+    <div class="section-hdr">
+      <h2 data-es="Fase de grupos — 48 selecciones" data-en="Group stage — 48 teams">Fase de grupos — 48 selecciones</h2>
+    </div>
+    <div class="groups-wrap">
+
+      <!-- GRUPO A -->
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name" data-es="GRUPO A" data-en="GROUP A">GRUPO A</span>
+          <span style="font-size:9px;color:var(--text3)">3J · 3PJ</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th data-es="PTS" data-en="PTS">PTS</th>
+          </tr></thead>
+          <tbody>
+            <tr class="qualified"><td><span style="font-size:14px">🇲🇽</span><span data-es="México" data-en="Mexico">México</span></td><td>3</td><td>2</td><td>1</td><td>0</td><td>+4</td><td class="pts-col">7</td></tr>
+            <tr class="qualified"><td><span style="font-size:14px">🇵🇱</span><span data-es="Polonia" data-en="Poland">Polonia</span></td><td>3</td><td>1</td><td>1</td><td>1</td><td>+1</td><td class="pts-col">4</td></tr>
+            <tr><td><span style="font-size:14px">🇸🇦</span><span data-es="Arabia S." data-en="Saudi Ar.">Arabia S.</span></td><td>3</td><td>1</td><td>0</td><td>2</td><td>-2</td><td class="pts-col">3</td></tr>
+            <tr><td><span style="font-size:14px">🇿🇦</span><span data-es="Sudáfrica" data-en="South Africa">Sudáfrica</span></td><td>3</td><td>0</td><td>0</td><td>3</td><td>-3</td><td class="pts-col">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- GRUPO B -->
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name" data-es="GRUPO B" data-en="GROUP B">GRUPO B</span>
+          <span style="font-size:9px;color:var(--text3)">2J · En curso</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th>PTS</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><span style="font-size:14px">🇧🇷</span><span data-es="Brasil" data-en="Brazil">Brasil</span></td><td>2</td><td>2</td><td>0</td><td>0</td><td>+5</td><td class="pts-col">6</td></tr>
+            <tr><td><span style="font-size:14px">🇲🇦</span><span data-es="Marruecos" data-en="Morocco">Marruecos</span></td><td>2</td><td>1</td><td>0</td><td>1</td><td>+1</td><td class="pts-col">3</td></tr>
+            <tr><td><span style="font-size:14px">🇺🇾</span>Uruguay</td><td>2</td><td>0</td><td>1</td><td>1</td><td>-2</td><td class="pts-col">1</td></tr>
+            <tr><td><span style="font-size:14px">🇨🇲</span><span data-es="Camerún" data-en="Cameroon">Camerún</span></td><td>2</td><td>0</td><td>1</td><td>1</td><td>-4</td><td class="pts-col">1</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- GRUPO C -->
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name" data-es="GRUPO C" data-en="GROUP C">GRUPO C</span>
+          <span style="font-size:9px;color:var(--text3)" data-es="1J · En curso" data-en="1M · In progress">1J · En curso</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th>PTS</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><span style="font-size:14px">🇦🇷</span><span data-es="Argentina" data-en="Argentina">Argentina</span></td><td>1</td><td>1</td><td>0</td><td>0</td><td>+2</td><td class="pts-col">3</td></tr>
+            <tr><td><span style="font-size:14px">🇸🇦</span><span data-es="Senegal" data-en="Senegal">Senegal</span></td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td class="pts-col">1</td></tr>
+            <tr><td><span style="font-size:14px">🇳🇬</span>Nigeria</td><td>1</td><td>0</td><td>1</td><td>0</td><td>0</td><td class="pts-col">1</td></tr>
+            <tr><td><span style="font-size:14px">🇨🇦</span><span data-es="Canadá" data-en="Canada">Canadá</span></td><td>1</td><td>0</td><td>0</td><td>1</td><td>-2</td><td class="pts-col">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- GRUPO D -->
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name" data-es="GRUPO D" data-en="GROUP D">GRUPO D</span>
+          <span style="font-size:9px;color:var(--text3)" data-es="Pendiente" data-en="Upcoming">Pendiente</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th>PTS</th>
+          </tr></thead>
+          <tbody>
+            <tr><td><span style="font-size:14px">🇩🇪</span><span data-es="Alemania" data-en="Germany">Alemania</span></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="pts-col">0</td></tr>
+            <tr><td><span style="font-size:14px">🇵🇹</span><span data-es="Portugal" data-en="Portugal">Portugal</span></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="pts-col">0</td></tr>
+            <tr><td><span style="font-size:14px">🇺🇸</span><span data-es="EE.UU." data-en="USA">EE.UU.</span></td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="pts-col">0</td></tr>
+            <tr><td><span style="font-size:14px">🇬🇭</span>Ghana</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td class="pts-col">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+    <p style="font-size:10px;color:var(--text3);margin-top:10px;text-align:center" data-es="Clasifican los 2 primeros de cada grupo + 8 mejores terceros (32 equipos)" data-en="Top 2 of each group + 8 best third-placed teams advance (32 teams)">Clasifican los 2 primeros de cada grupo + 8 mejores terceros (32 equipos)</p>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════ VIEW: NOTICIAS ═══════════════════════════════════ -->
+<div id="view-noticias" class="view">
+
+  <div>
+    <div class="section-hdr">
+      <h2 data-es="Noticias del torneo" data-en="Tournament news">Noticias del torneo</h2>
+      <span class="tag-live" data-es="actualizado" data-en="updated">actualizado</span>
+    </div>
+    <div class="news-grid">
+      <div class="news-card">
+        <span class="news-tag nt-injury" data-es="Lesión" data-en="Injury">Lesión</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo" data-en="Rodrygo and Militão confirmed out: Brazil arrives with 4 absences">Rodrygo y Militão confirmados fuera: Brasil llega con 4 bajas al torneo</div>
+          <div class="news-meta">ESPN · <span data-es="Hace 2 horas" data-en="2 hours ago">Hace 2 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-result" data-es="Resultado" data-en="Result">Resultado</span>
+        <div class="news-body">
+          <div class="news-title" id="news-mex-rsa" data-es="México derrota a Sudáfrica en el partido inaugural del Azteca" data-en="Mexico defeats South Africa in Azteca opener">México derrota a Sudáfrica en el partido inaugural del Azteca</div>
+          <div class="news-meta">Récord · <span data-es="Hace 3 horas" data-en="3 hours ago">Hace 3 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-odds" data-es="Odds" data-en="Odds">Odds</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Las casas acortan a España tras confirmarse Yamal en la convocatoria" data-en="Bookmakers shorten Spain after Yamal confirmed in squad">Las casas acortan a España tras confirmarse Yamal en la convocatoria</div>
+          <div class="news-meta">Marca · <span data-es="Hace 4 horas" data-en="4 hours ago">Hace 4 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-injury" data-es="Lesión" data-en="Injury">Lesión</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Xavi Simons confirma que se pierde el Mundial tras rotura de LCA con el Tottenham" data-en="Xavi Simons confirms he misses the World Cup after ACL tear with Tottenham">Xavi Simons confirma que se pierde el Mundial tras rotura de LCA con el Tottenham</div>
+          <div class="news-meta">The Guardian · <span data-es="Hace 6 horas" data-en="6 hours ago">Hace 6 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-preview" data-es="Preview" data-en="Preview">Preview</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Argentina vs Nigeria: Scaloni confirma que Messi y Di María arrancan en el once" data-en="Argentina vs Nigeria: Scaloni confirms Messi and Di María start">Argentina vs Nigeria: Scaloni confirma que Messi y Di María arrancan en el once</div>
+          <div class="news-meta">TyC Sports · <span data-es="Hace 1 hora" data-en="1 hour ago">Hace 1 hora</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-odds" data-es="Odds" data-en="Odds">Odds</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Sharp money entrando fuerte en Over 2.5 para Francia vs Japón — línea se mueve a -130" data-en="Sharp money heavy on Over 2.5 for France vs Japan — line moves to -130">Sharp money entrando fuerte en Over 2.5 para Francia vs Japón — línea se mueve a -130</div>
+          <div class="news-meta">Action Network · <span data-es="Hace 30 min" data-en="30 min ago">Hace 30 min</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-injury" data-es="Lesión" data-en="Injury">Lesión</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Japón sin Mitoma ni Minamino: la Azul Samurai llega con su peor frente de ataque en años" data-en="Japan without Mitoma and Minamino: Samurai Blue arrive with worst attack in years">Japón sin Mitoma ni Minamino: la Azul Samurai llega con su peor frente de ataque en años</div>
+          <div class="news-meta">NHK Sports · <span data-es="Hace 5 horas" data-en="5 hours ago">Hace 5 horas</span></div>
+        </div>
+      </div>
+      <div class="news-card">
+        <span class="news-tag nt-result" data-es="Resultado" data-en="Result">Resultado</span>
+        <div class="news-body">
+          <div class="news-title" data-es="Inglaterra gana 1-0 a Senegal con gol de Kane en el primer tiempo" data-en="England beat Senegal 1-0 with Kane first-half goal">Inglaterra gana 1-0 a Senegal con gol de Kane en el primer tiempo</div>
+          <div class="news-meta">BBC Sport · <span data-es="Hace 5 horas" data-en="5 hours ago">Hace 5 horas</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════ VIEW: PREMIUM ═══════════════════════════════════ -->
+<div id="view-premium" class="view">
+
+  <!-- BAJAS -->
+  <div id="bajas">
+    <div class="section-hdr">
+      <h2><span data-es="Bajas e impacto" data-en="Injuries & impact">Bajas e impacto</span> <span class="tag-premium">Premium</span></h2>
+    </div>
+    <div class="premium-module">
+      <div class="pm-header">
+        <span class="pm-title" data-es="⚡ Jugadores fuera — impacto en mercados" data-en="⚡ Players out — market impact">⚡ Jugadores fuera — impacto en mercados</span>
+        <span style="font-size:10px;color:var(--text3)" data-es="15 bajas confirmadas" data-en="15 confirmed absences">15 bajas confirmadas</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content">
+            <div class="fake-row">
+              <div class="fake-flag-name"><span style="font-size:18px">🇧🇷</span><div><div style="font-size:13px;font-weight:600">Rodrygo Goes</div><div style="font-size:10px;color:var(--text3)">Real Madrid · LCA + menisco</div></div></div>
+              <span class="fake-tag tag-red" data-es="Crítico" data-en="Critical">Crítico</span>
+              <span class="fake-impact" data-es="Over 2.5 Brasil → valor" data-en="Brazil Over 2.5 → value">Over 2.5 Brasil → valor</span>
+            </div>
+            <div class="fake-row">
+              <div class="fake-flag-name"><span style="font-size:18px">🇧🇷</span><div><div style="font-size:13px;font-weight:600">Éder Militão</div><div style="font-size:10px;color:var(--text3)">Real Madrid · Bíceps femoral</div></div></div>
+              <span class="fake-tag tag-red" data-es="Crítico" data-en="Critical">Crítico</span>
+              <span class="fake-impact" data-es="Zaga expuesta vs presión" data-en="Defense exposed vs pressure">Zaga expuesta vs presión</span>
+            </div>
+            <div class="fake-row">
+              <div class="fake-flag-name"><span style="font-size:18px">🇳🇱</span><div><div style="font-size:13px;font-weight:600">Xavi Simons</div><div style="font-size:10px;color:var(--text3)">Tottenham · LCA confirmado</div></div></div>
+              <span class="fake-tag tag-amber" data-es="Alto" data-en="High">Alto</span>
+              <span class="fake-impact" data-es="Holanda pierde motor creativo" data-en="Holland loses creative engine">Holanda pierde motor creativo</span>
+            </div>
+            <div class="fake-row">
+              <div class="fake-flag-name"><span style="font-size:18px">🇫🇷</span><div><div style="font-size:13px;font-weight:600">Hugo Ekitike</div><div style="font-size:10px;color:var(--text3)">Liverpool · Tendón Aquiles</div></div></div>
+              <span class="fake-tag tag-amber" data-es="Alto" data-en="High">Alto</span>
+              <span class="fake-impact" data-es="Francia recalibra el ataque" data-en="France recalibrates attack">Francia recalibra el ataque</span>
+            </div>
+            <div class="fake-row">
+              <div class="fake-flag-name"><span style="font-size:18px">🇯🇵</span><div><div style="font-size:13px;font-weight:600">Mitoma + Minamino</div><div style="font-size:10px;color:var(--text3)">Brighton / Monaco · 2 bajas</div></div></div>
+              <span class="fake-tag tag-red" data-es="Crítico" data-en="Critical">Crítico</span>
+              <span class="fake-impact" data-es="Under Japón — valor claro" data-en="Japan Under — clear value">Under Japón — valor claro</span>
+            </div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">🔒</div>
+            <div class="paywall-headline" data-es="Análisis completo de bajas" data-en="Full injury impact analysis">Análisis completo de bajas</div>
+            <div class="paywall-sub" data-es="15 jugadores fuera, impacto por selección y qué apuestas concretas abre cada baja." data-en="15 players out, impact by team and the exact bets each absence opens up.">15 jugadores fuera, impacto por selección y qué apuestas concretas abre cada baja.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn primary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Premium — $9/mes" data-en="Premium — $9/mo">Premium — $9/mes</span>
+                <span class="plan-price" data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span>
+              </button>
+              <button class="plan-btn secondary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Ver todos los planes" data-en="See all plans">Ver todos los planes</span>
+                <span class="plan-price light" data-es="Desde $9/mes" data-en="From $9/mo">Desde $9/mes</span>
+              </button>
+            </div>
+            <div class="paywall-trust" data-es="🔐 Pago seguro · Sin compromisos" data-en="🔐 Secure payment · No commitments">🔐 Pago seguro · Sin compromisos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLIMA -->
+  <div id="clima">
+    <div class="section-hdr">
+      <h2><span data-es="Clima y logística" data-en="Weather & travel">Clima y logística</span> <span class="tag-premium">Premium</span></h2>
+    </div>
+    <div class="premium-module">
+      <div class="pm-header">
+        <span class="pm-title" data-es="🌡 Condiciones el día del partido" data-en="🌡 Match day conditions">🌡 Condiciones el día del partido</span>
+        <span style="font-size:10px;color:var(--text3)">Open-Meteo · 6h antes</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content">
+            <div class="clima-grid">
+              <div class="clima-card"><div class="clima-venue">AT&T Stadium · Dallas</div><div class="clima-temp">38°<span>C / 100°F</span></div><div class="clima-row"><span>💧 72%</span><span>💨 14km/h</span></div><div class="clima-alert alert-hot" data-es="⚠ Calor extremo" data-en="⚠ Extreme heat">⚠ Calor extremo</div></div>
+              <div class="clima-card"><div class="clima-venue">MetLife · New Jersey</div><div class="clima-temp">24°<span>C / 75°F</span></div><div class="clima-row"><span>💧 55%</span><span>💨 8km/h</span></div><div class="clima-alert alert-ok" data-es="✓ Condiciones óptimas" data-en="✓ Optimal conditions">✓ Condiciones óptimas</div></div>
+              <div class="clima-card"><div class="clima-venue">Azteca · CDMX</div><div class="clima-temp">19°<span>C / 66°F</span></div><div class="clima-row"><span>💧 68%</span><span>💨 22km/h</span></div><div class="clima-alert alert-wind" data-es="💨 Viento alto — aéreos" data-en="💨 High wind — affects aerials">💨 Viento alto — aéreos</div></div>
+            </div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">🌡</div>
+            <div class="paywall-headline" data-es="Clima e inteligencia logística" data-en="Weather & logistics intelligence">Clima e inteligencia logística</div>
+            <div class="paywall-sub" data-es="Temperatura, humedad y viento en cada sede + distancia entre partidos. El dato que las casas raramente pricean." data-en="Temperature, humidity and wind at each venue + travel distance between games. The data books rarely price in.">Temperatura, humedad y viento en cada sede + distancia entre partidos. El dato que las casas raramente pricean.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn primary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Desbloquear — $9/mes" data-en="Unlock — $9/mo">Desbloquear — $9/mes</span>
+                <span class="plan-price" data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span>
+              </button>
+            </div>
+            <div class="paywall-trust">🔐 <span data-es="Pago seguro · Sin compromisos" data-en="Secure payment · No commitments">Pago seguro · Sin compromisos</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ÁRBITROS -->
+  <div id="arbitros">
+    <div class="section-hdr">
+      <h2><span data-es="Árbitros" data-en="Referees">Árbitros</span> <span class="tag-premium">Premium</span></h2>
+    </div>
+    <div class="premium-module">
+      <div class="pm-header">
+        <span class="pm-title" data-es="🟡 Árbitros asignados — historial y tendencias" data-en="🟡 Assigned referees — history & trends">🟡 Árbitros asignados — historial y tendencias</span>
+        <span style="font-size:10px;color:var(--text3)" data-es="Últimos 30 partidos oficiales" data-en="Last 30 official matches">Últimos 30 partidos oficiales</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content">
+            <div class="ref-card">
+              <div><div class="ref-name">Szymon Marciniak</div><div class="ref-country">🇵🇱 Polonia · FIFA Elite</div></div>
+              <div class="ref-stat"><div class="val hot mono">4.8</div><div class="lbl" data-es="Tarjetas/ptdo" data-en="Cards/match">Tarjetas/ptdo</div></div>
+              <div class="ref-stat"><div class="val warn mono">38%</div><div class="lbl">Over 2.5</div></div>
+              <div class="ref-stat"><div class="val ok mono">12%</div><div class="lbl" data-es="Pen/ptdo" data-en="Pen/match">Pen/ptdo</div></div>
+              <div class="ref-stat"><div class="val hot mono" data-es="Alto" data-en="High">Alto</div><div class="lbl" data-es="Mercado tarj." data-en="Cards mkt">Mercado tarj.</div></div>
+            </div>
+            <div class="ref-card">
+              <div><div class="ref-name">Facundo Tello</div><div class="ref-country">🇦🇷 Argentina · FIFA</div></div>
+              <div class="ref-stat"><div class="val ok mono">2.9</div><div class="lbl" data-es="Tarjetas/ptdo" data-en="Cards/match">Tarjetas/ptdo</div></div>
+              <div class="ref-stat"><div class="val warn mono">61%</div><div class="lbl">Over 2.5</div></div>
+              <div class="ref-stat"><div class="val warn mono">18%</div><div class="lbl" data-es="Pen/ptdo" data-en="Pen/match">Pen/ptdo</div></div>
+              <div class="ref-stat"><div class="val ok mono" data-es="Bajo" data-en="Low">Bajo</div><div class="lbl" data-es="Mercado tarj." data-en="Cards mkt">Mercado tarj.</div></div>
+            </div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">🟡</div>
+            <div class="paywall-headline" data-es="Historial completo de árbitros" data-en="Full referee history">Historial completo de árbitros</div>
+            <div class="paywall-sub" data-es="Promedio de tarjetas, penales y tendencia Over/Under por árbitro. El mercado de tarjetas casi nunca lo prica." data-en="Average cards, penalties and Over/Under trend per referee. The cards market almost never prices this in.">Promedio de tarjetas, penales y tendencia Over/Under por árbitro. El mercado de tarjetas casi nunca lo prica.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn primary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Desbloquear — $9/mes" data-en="Unlock — $9/mo">Desbloquear — $9/mes</span>
+                <span class="plan-price" data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span>
+              </button>
+            </div>
+            <div class="paywall-trust">🔐 <span data-es="Pago seguro" data-en="Secure payment">Pago seguro</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CROWD vs CASAS -->
+  <div id="crowd">
+    <div class="section-hdr">
+      <h2><span data-es="Crowd vs Casas" data-en="Crowd vs Books">Crowd vs Casas</span> <span class="tag-premium">Premium</span></h2>
+    </div>
+    <div class="premium-module">
+      <div class="pm-header">
+        <span class="pm-title" data-es="📊 Polymarket vs Sportsbooks — divergencias" data-en="📊 Polymarket vs Sportsbooks — divergences">📊 Polymarket vs Sportsbooks — divergencias</span>
+        <span style="font-size:10px;color:var(--text3)" data-es="Edge = el crowd ve algo que las casas ignoran" data-en="Edge = crowd sees something books haven't priced">Edge = crowd ve lo que las casas ignoran</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content" style="min-height:140px">
+            <div class="fake-row">
+              <span style="font-size:12px;font-weight:600">🇦🇷 <span data-es="Argentina gana" data-en="Argentina wins">Argentina gana</span></span>
+              <div style="display:flex;gap:12px;align-items:center">
+                <span style="font-size:11px;color:var(--text3)">Polymarket <span style="color:var(--gold);font-family:'Space Mono'">78%</span></span>
+                <span style="font-size:11px;color:var(--text3)">DraftKings <span style="font-family:'Space Mono'">68%</span></span>
+                <span class="fake-tag tag-green">+10% edge 💎</span>
+              </div>
+            </div>
+            <div class="fake-row">
+              <span style="font-size:12px;font-weight:600">🇯🇵 <span data-es="Japón avanza" data-en="Japan advances">Japón avanza</span></span>
+              <div style="display:flex;gap:12px;align-items:center">
+                <span style="font-size:11px;color:var(--text3)">Polymarket <span style="color:var(--gold);font-family:'Space Mono'">31%</span></span>
+                <span style="font-size:11px;color:var(--text3)">Bet365 <span style="font-family:'Space Mono'">45%</span></span>
+                <span class="fake-tag tag-red" data-es="-14% contra" data-en="-14% against">-14% contra</span>
+              </div>
+            </div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">📊</div>
+            <div class="paywall-headline" data-es="Crowd vs Casas" data-en="Crowd vs Books">Crowd vs Casas</div>
+            <div class="paywall-sub" data-es="Polymarket y Kalshi contra DraftKings, Bet365 y más. Detecta dónde el mercado de predicción ve algo que los sportsbooks no han ajustado." data-en="Polymarket and Kalshi vs DraftKings, Bet365 and more. Find where prediction markets see something sportsbooks haven't adjusted.">Polymarket y Kalshi contra DraftKings, Bet365 y más. Detecta dónde el mercado de predicción ve algo que los sportsbooks no han ajustado.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn primary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Desbloquear — $9/mes" data-en="Unlock — $9/mo">Desbloquear — $9/mes</span>
+                <span class="plan-price" data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span>
+              </button>
+            </div>
+            <div class="paywall-trust">🔐 <span data-es="Pago seguro" data-en="Secure payment">Pago seguro</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PORTAFOLIO -->
+  <div id="portfolio">
+    <div class="section-hdr">
+      <h2><span data-es="Mi portafolio" data-en="My portfolio">Mi portafolio</span> <span class="tag-premium">Premium</span></h2>
+    </div>
+    <div class="premium-module">
+      <div class="pm-header">
+        <span class="pm-title" data-es="💼 Tus picks · ROI acumulado" data-en="💼 Your picks · Cumulative ROI">💼 Tus picks · ROI acumulado</span>
+        <span style="font-size:10px;color:var(--green)">+18.4% ROI</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+              <div class="stat-card"><div class="val mono" style="color:var(--green)">+$420</div><div class="lbl">P&amp;L</div></div>
+              <div class="stat-card"><div class="val mono">18.4%</div><div class="lbl">ROI</div></div>
+              <div class="stat-card"><div class="val mono">8/11</div><div class="lbl" data-es="Picks ganadores" data-en="Winning picks">Picks</div></div>
+              <div class="stat-card"><div class="val mono" style="color:var(--gold)">72%</div><div class="lbl" data-es="Win rate" data-en="Win rate">Win rate</div></div>
+            </div>
+            <div class="port-row"><span class="port-match">Brasil Over 2.5</span><span class="port-meta">-115 · $100</span><span class="port-result win">+$87</span></div>
+            <div class="port-row"><span class="port-match">España ML</span><span class="port-meta">-165 · $165</span><span class="port-result win">+$100</span></div>
+            <div class="port-row"><span class="port-match" data-es="Japón avanza grupo" data-en="Japan group stage">Japón avanza grupo</span><span class="port-meta">+140 · $50</span><span class="port-result loss">-$50</span></div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">💼</div>
+            <div class="paywall-headline" data-es="Trackea tu portafolio" data-en="Track your portfolio">Trackea tu portafolio</div>
+            <div class="paywall-sub" data-es="Registra picks, ve tu P&L en tiempo real y el Kelly criterion sugerido para cada apuesta." data-en="Log picks, see real-time P&L and the suggested Kelly criterion for each bet.">Registra picks, ve tu P&L en tiempo real y el Kelly criterion sugerido para cada apuesta.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn primary" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Activar — $9/mes" data-en="Activate — $9/mo">Activar — $9/mes</span>
+                <span class="plan-price" data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span>
+              </button>
+            </div>
+            <div class="paywall-trust">🔐 <span data-es="Pago seguro" data-en="Secure payment">Pago seguro</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ARB DETECTOR -->
+  <div>
+    <div class="section-hdr">
+      <h2><span data-es="Arb detector" data-en="Arb detector">Arb detector</span> <span class="tag-pro">Pro</span></h2>
+    </div>
+    <div class="premium-module" style="border-color:rgba(155,114,239,0.25)">
+      <div class="pm-header" style="background:rgba(155,114,239,0.05);border-color:rgba(155,114,239,0.15)">
+        <span class="pm-title" style="color:var(--purple)" data-es="⚡ Arbitraje en tiempo real — 10+ casas" data-en="⚡ Real-time arbitrage — 10+ books">⚡ Arbitraje en tiempo real — 10+ casas</span>
+        <span style="font-size:10px;color:var(--purple);opacity:0.7" data-es="Solo disponible en Pro" data-en="Pro only">Solo disponible en Pro</span>
+      </div>
+      <div class="pm-body">
+        <div class="paywall-wrap">
+          <div class="blurred-content" style="min-height:100px">
+            <div class="fake-row">
+              <span style="font-size:12px;font-weight:600">🇪🇸 ESP <span data-es="gana" data-en="wins">gana</span> · DK +140 / Bet365 +155</span>
+              <span class="fake-tag" style="background:rgba(155,114,239,0.1);color:var(--purple)">+2.3% arb</span>
+            </div>
+          </div>
+          <div class="paywall-overlay">
+            <div class="paywall-icon">⚡</div>
+            <div class="paywall-headline" data-es="Arbitraje garantizado" data-en="Guaranteed arbitrage">Arbitraje garantizado</div>
+            <div class="paywall-sub" data-es="Escaneo continuo de 10+ casas. Stake exacto por casa y ganancia garantizada en segundos." data-en="Continuous scan of 10+ books. Exact stake per book and guaranteed profit in seconds.">Escaneo continuo de 10+ casas. Stake exacto por casa y ganancia garantizada en segundos.</div>
+            <div class="paywall-plans">
+              <button class="plan-btn" style="flex:1;padding:11px;border-radius:var(--radius);cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600;background:var(--purple);color:#fff;border:none;" onclick="document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'})">
+                <span data-es="Pro — $29/mes" data-en="Pro — $29/mo">Pro — $29/mes</span>
+                <span class="plan-price" style="color:rgba(255,255,255,0.5)" data-es="Todo Premium incluido" data-en="All Premium included">Todo Premium incluido</span>
+              </button>
+            </div>
+            <div class="paywall-trust">🔐 <span data-es="Pago seguro" data-en="Secure payment">Pago seguro</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PRICING -->
+  <div id="pricing-section">
+    <div class="section-hdr"><h2 data-es="Planes" data-en="Plans">Planes</h2></div>
+    <div class="pricing-section">
+      <div style="font-size:20px;font-weight:700;letter-spacing:-0.02em" data-es="Elige tu plan" data-en="Choose your plan">Elige tu plan</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:6px" data-es="Empieza gratis. Sube cuando lo necesites. Cancela cuando quieras." data-en="Start free. Upgrade when you need it. Cancel anytime.">Empieza gratis. Sube cuando lo necesites. Cancela cuando quieras.</div>
+      <div class="pricing-grid">
+
+        <div class="price-card">
+          <div class="price-tier" data-es="Gratis" data-en="Free">Gratis</div>
+          <div class="price-amount"><sup>$</sup>0<sub data-es=" / siempre" data-en=" / forever"> / siempre</sub></div>
+          <div class="price-desc" data-es="Datos básicos del torneo. Sin análisis AI." data-en="Basic tournament data. No AI analysis.">Datos básicos del torneo. Sin análisis AI.</div>
+          <ul class="price-features">
+            <li><span class="feat-check">✓</span> <span data-es="Partidos + resultados en vivo" data-en="Matches + live results">Partidos + resultados en vivo</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Tabla de grupos actualizada" data-en="Live group standings">Tabla de grupos actualizada</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Odds 1X2 de 1 sportsbook" data-en="1X2 odds from 1 book">Odds 1X2 de 1 sportsbook</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Noticias del torneo" data-en="Tournament news">Noticias del torneo</span></li>
+            <li><span class="feat-lock">○</span> <span data-es="Análisis AI" data-en="AI analysis">Análisis AI</span></li>
+            <li><span class="feat-lock">○</span> <span data-es="Bajas e impacto" data-en="Injuries & impact">Bajas e impacto</span></li>
+            <li><span class="feat-lock">○</span> <span data-es="Clima y árbitros" data-en="Weather & referees">Clima y árbitros</span></li>
+          </ul>
+          <button class="price-btn outline" data-es="Plan actual" data-en="Current plan">Plan actual</button>
+        </div>
+
+        <div class="price-card featured" data-badge="MÁS POPULAR">
+          <div class="price-tier">Premium</div>
+          <div class="price-amount"><sup>$</sup>9<sub data-es=" / mes" data-en=" / mo"> / mes</sub></div>
+          <div class="price-desc" data-es="Análisis AI completo y todos los módulos de inteligencia." data-en="Full AI analysis and all intelligence modules.">Análisis AI completo y todos los módulos de inteligencia.</div>
+          <ul class="price-features">
+            <li><span class="feat-check">✓</span> <span data-es="Todo lo de Free" data-en="Everything in Free">Todo lo de Free</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Análisis AI de cada partido" data-en="AI analysis per match">Análisis AI de cada partido</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Top picks del día con EV" data-en="Daily top picks with EV">Top picks del día con EV</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Bajas e impacto en mercados" data-en="Injuries & market impact">Bajas e impacto en mercados</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Clima y logística" data-en="Weather & logistics">Clima y logística</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Inteligencia de árbitros" data-en="Referee intelligence">Inteligencia de árbitros</span></li>
+            <li><span class="feat-check">✓</span> Crowd vs Casas (Polymarket)</li>
+            <li><span class="feat-check">✓</span> <span data-es="Portafolio personal + ROI" data-en="Personal portfolio + ROI">Portafolio personal + ROI</span></li>
+          </ul>
+          <button class="price-btn gold" data-es="Activar Premium →" data-en="Activate Premium →">Activar Premium →</button>
+        </div>
+
+        <div class="price-card">
+          <div class="price-tier">Pro</div>
+          <div class="price-amount"><sup>$</sup>29<sub data-es=" / mes" data-en=" / mo"> / mes</sub></div>
+          <div class="price-desc" data-es="Para apostadores serios. Arbitraje, multi-book y API." data-en="For serious bettors. Arbitrage, multi-book and API.">Para apostadores serios. Arbitraje, multi-book y API.</div>
+          <ul class="price-features">
+            <li><span class="feat-check">✓</span> <span data-es="Todo lo de Premium" data-en="Everything in Premium">Todo lo de Premium</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Arb detector en tiempo real" data-en="Real-time arb detector">Arb detector en tiempo real</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Odds multi-book (10+ casas)" data-en="Multi-book odds (10+ books)">Odds multi-book (10+ casas)</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Movimiento de líneas" data-en="Line movement">Movimiento de líneas</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Reporte PDF descargable" data-en="Downloadable PDF report">Reporte PDF descargable</span></li>
+            <li><span class="feat-check">✓</span> <span data-es="Acceso API" data-en="API access">Acceso API</span></li>
+          </ul>
+          <button class="price-btn outline" data-es="Activar Pro →" data-en="Activate Pro →">Activar Pro →</button>
+        </div>
+
+      </div>
+      <div style="display:flex;justify-content:center;gap:28px;margin-top:20px;padding-top:20px;border-top:0.5px solid var(--border);flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text3)">🔐 <span data-es="Stripe · Pago seguro" data-en="Stripe · Secure payment">Stripe · Pago seguro</span></span>
+        <span style="font-size:11px;color:var(--text3)">↩ <span data-es="Cancela cuando quieras" data-en="Cancel anytime">Cancela cuando quieras</span></span>
+        <span style="font-size:11px;color:var(--text3)">⚡ <span data-es="Acceso inmediato" data-en="Instant access">Acceso inmediato</span></span>
+        <span style="font-size:11px;color:var(--text3)">📱 <span data-es="Web + móvil" data-en="Web + mobile">Web + móvil</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div style="padding:16px 0;border-top:0.5px solid var(--border);text-align:center;">
+    <p style="font-size:10px;color:var(--text3);line-height:1.7">
+      IBICE World Cup Intelligence — Íbice Intelligence Partners · ibiceintelligence.com<br>
+      <span data-es="Las apuestas deportivas conllevan riesgo financiero. Este análisis es informativo y no constituye asesoría financiera. Verifica la legalidad en tu jurisdicción. Apuesta responsablemente." data-en="Sports betting involves financial risk. This analysis is informational and does not constitute financial advice. Verify legality in your jurisdiction. Bet responsibly.">Las apuestas deportivas conllevan riesgo financiero. Este análisis es informativo y no constituye asesoría financiera. Verifica la legalidad en tu jurisdicción. Apuesta responsablemente.</span>
+    </p>
+  </div>
+
+</div><!-- /view-premium -->
+
+</main>
+</div><!-- /app-shell -->
+
+<script>
+// ── CURRENT LANGUAGE ──
+let currentLang = 'es';
+
+// ── NAVIGATION ──
+function showView(viewId, clickedTab) {
+  // hide all views
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  // show target
+  const target = document.getElementById('view-' + viewId);
+  if (target) target.classList.add('active');
+
+  // update nav tabs
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  if (clickedTab) {
+    clickedTab.classList.add('active');
+  } else {
+    // find matching nav tab by data attr
+    document.querySelectorAll('.nav-tab').forEach(t => {
+      const label = (t.getAttribute('data-es') || '').toLowerCase();
+      if (label === viewId || t.textContent.toLowerCase().includes(viewId)) {
+        t.classList.add('active');
+      }
     });
-
-    const raw = Array.isArray(groupData) ? groupData : groupData.groups || [];
-    const groups = raw.map(g => ({
-      name:  g.name || g.group || g._id,
-      teams: (g.teams || []).map(t => {
-        const tid = String(t.team_id || t.id || '');
-        const teamName = teamMap[tid] || tid;
-        return {
-          name:   teamName,
-          flag:   t.flag || '',
-          played: parseInt(t.mp  || t.played || 0),
-          won:    parseInt(t.w   || t.won    || 0),
-          drawn:  parseInt(t.d   || t.drawn  || 0),
-          lost:   parseInt(t.l   || t.lost   || 0),
-          gf:     parseInt(t.gf  || 0),
-          ga:     parseInt(t.ga  || 0),
-          gd:     parseInt(t.gd  || 0),
-          points: parseInt(t.pts || t.points || 0),
-        };
-      }).sort((a, b) => b.points - a.points || b.gd - a.gd),
-    }));
-    // Sort groups alphabetically A→L
-    groups.sort((a, b) => a.name.localeCompare(b.name));
-    return { ok: true, groups };
-  } catch (e) {
-    return { ok: false, error: e.message, groups: [] };
   }
+
+  // update sidebar items
+  document.querySelectorAll('.aside-item[id^="sb-"]').forEach(s => s.classList.remove('active'));
+  const sbItem = document.getElementById('sb-' + viewId);
+  if (sbItem) sbItem.classList.add('active');
+
+  // scroll main to top
+  document.querySelector('main').scrollTop = 0;
 }
 
-// ── ACTION: WEATHER ────────────────────────────────────────────────────────
-// Source: Open-Meteo — free, no API key required
-async function getWeather(venue) {
-  const key   = (venue || 'dallas').toLowerCase().replace(/\s+/g, '');
-  const coord = VENUE_COORDS[key] || VENUE_COORDS['dallas'];
-
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast` +
-      `?latitude=${coord.lat}&longitude=${coord.lon}` +
-      `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code` +
-      `&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max` +
-      `&temperature_unit=celsius&wind_speed_unit=kmh&timezone=auto&forecast_days=3`;
-
-    const data = await fetchJSON(url);
-    const c = data.current;
-    const d = data.daily;
-
-    // WMO weather code → simple label
-    const wmoLabel = (code) => {
-      if (code === 0)           return 'Despejado / Clear';
-      if (code <= 3)            return 'Parcialmente nublado / Partly cloudy';
-      if (code <= 48)           return 'Nublado / Cloudy';
-      if (code <= 67)           return 'Lluvia / Rain';
-      if (code <= 77)           return 'Nieve / Snow';
-      if (code <= 82)           return 'Chubascos / Showers';
-      if (code <= 99)           return 'Tormenta / Thunderstorm';
-      return 'Variable';
-    };
-
-    // Betting alert logic
-    const alerts = [];
-    const tempC = c.temperature_2m;
-    const humid = c.relative_humidity_2m;
-    const wind  = c.wind_speed_10m;
-    const rain  = d.precipitation_probability_max?.[0] ?? 0;
-
-    if (tempC >= 35)      alerts.push({ type: 'hot',   es: '⚠ Calor extremo — favorece Under',          en: '⚠ Extreme heat — favors Under'         });
-    if (humid >= 75)      alerts.push({ type: 'humid', es: '💧 Humedad alta — ritmo lento',               en: '💧 High humidity — slower pace'         });
-    if (wind >= 20)       alerts.push({ type: 'wind',  es: '💨 Viento alto — afecta centros y disparos', en: '💨 High wind — affects crosses & shots' });
-    if (rain >= 60)       alerts.push({ type: 'rain',  es: '🌧 Lluvia probable — campo pesado',           en: '🌧 Rain likely — heavy pitch'           });
-    if (alerts.length === 0) alerts.push({ type: 'ok', es: '✓ Condiciones óptimas para el partido',      en: '✓ Optimal match conditions'             });
-
-    return {
-      ok: true,
-      venue:    coord.name,
-      current: {
-        tempC:    Math.round(tempC),
-        tempF:    Math.round(tempC * 9/5 + 32),
-        humidity: humid,
-        windKmh:  Math.round(wind),
-        condition: wmoLabel(c.weather_code),
-      },
-      forecast: (d.temperature_2m_max || []).slice(0, 3).map((max, i) => ({
-        tempMaxC: Math.round(max),
-        tempMinC: Math.round(d.temperature_2m_min[i]),
-        rainPct:  d.precipitation_probability_max[i],
-      })),
-      alerts,
-    };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
+// ── LANGUAGE TOGGLE ──
+function setLang(lang, btn) {
+  currentLang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyLang();
 }
 
-// ── ACTION: MATCH ANALYSIS (existing Claude flow) ─────────────────────────
-async function getMatchAnalysis(home, away, lang = 'es') {
-  const system = lang === 'en'
-    ? `You are an expert FIFA World Cup 2026 betting analyst.
-       Return ONLY valid JSON with these exact keys:
-       - summary: string (2-3 sentences narrative analysis)
-       - picks: array of up to 4 objects with {market, recommendation, odds, ev, confidence}
-         where odds is a decimal number string like "1.85", ev is a number like 8.5, confidence is 0-100
-       - keyFactors: array of 4-6 strings
-       - prediction: object with EXACTLY {score, note} where:
-           * score MUST be "X-Y" number format e.g. "2-1"
-           * The score MUST be consistent with your picks and summary. If you recommend betting on Team A winning, Team A must have more goals in the score.
-           * note is a 1-sentence explanation consistent with your analysis
-       CRITICAL: The prediction score must match the winner implied by your picks. Do not contradict yourself.`
-    : `Eres un analista experto de apuestas para la Copa Mundial FIFA 2026.
-       Responde SOLO con JSON válido con estas claves exactas:
-       - summary: string (análisis narrativo de 2-3 oraciones)
-       - picks: array de hasta 4 objetos con {market, recommendation, odds, ev, confidence}
-         donde odds es decimal como "1.85", ev es número como 8.5, confidence es 0-100
-       - keyFactors: array de 4-6 strings
-       - prediction: objeto con EXACTAMENTE {score, note} donde:
-           * score DEBE ser formato "X-Y" con números ej: "2-1"
-           * El score DEBE ser consistente con tus picks y summary. Si recomiendas apostar al Equipo A ganando, el Equipo A debe tener más goles en el score.
-           * note es una oración explicativa consistente con tu análisis
-       CRÍTICO: La predicción de marcador debe coincidir con el ganador implícito en tus picks. No te contradigas.`;
-
-  const user = lang === 'en'
-    ? `Analyze the FIFA World Cup 2026 match: ${home} vs ${away}. Give betting recommendations with expected value and a score prediction.`
-    : `Analiza el partido de Copa Mundial FIFA 2026: ${home} vs ${away}. Da recomendaciones de apuesta con valor esperado y una predicción de marcador.`;
-
-  const result = await callClaude(system, user);
-
-  // Auto-correct prediction score to match implied winner from picks
-  if (result && result.picks && result.prediction) {
-    const picks = result.picks || [];
-    // Find the most confident "win" pick to determine likely winner
-    const winPick = picks.find(p =>
-      p.recommendation && (
-        p.recommendation.toLowerCase().includes('gana') ||
-        p.recommendation.toLowerCase().includes('wins') ||
-        p.recommendation.toLowerCase().includes('victoria') ||
-        p.recommendation.toLowerCase().includes('win')
-      )
-    );
-    if (winPick && result.prediction.score) {
-      const scoreStr = result.prediction.score;
-      const parts = scoreStr.split('-').map(s => parseInt(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        const homeWins = parts[0] > parts[1];
-        const awayWins = parts[1] > parts[0];
-        const recLower = winPick.recommendation.toLowerCase();
-        // Check if the recommended winner is home or away team
-        const recHome = recLower.includes(home.toLowerCase().split(' ')[0].toLowerCase());
-        const recAway = recLower.includes(away.toLowerCase().split(' ')[0].toLowerCase());
-        // If contradiction detected — swap the score
-        if ((recHome && awayWins) || (recAway && homeWins)) {
-          result.prediction.score = parts[1] + '-' + parts[0];
-          result.prediction.note = (result.prediction.note || '') + ' [score corrected for consistency]';
-        }
+function applyLang() {
+  const attr = 'data-' + currentLang;
+  // update all elements with data-es / data-en
+  document.querySelectorAll('[data-es], [data-en]').forEach(el => {
+    const val = el.getAttribute(attr);
+    if (val !== null) {
+      // only update text nodes, not elements with children
+      if (el.children.length === 0) {
+        el.textContent = val;
       }
     }
-  }
-  return result;
+  });
+  // update html lang attribute
+  document.documentElement.lang = currentLang;
+  // update featured badge
+  document.querySelectorAll('.price-card.featured').forEach(c => {
+    c.setAttribute('data-badge', currentLang === 'es' ? 'MÁS POPULAR' : 'MOST POPULAR');
+  });
 }
 
-// ── ACTION: INJURIES ANALYSIS (Claude + web context) ──────────────────────
-async function getInjuriesAnalysis(lang = 'es') {
-  const system = lang === 'en'
-    ? `You are a FIFA World Cup 2026 injury intelligence analyst.
-       Return ONLY valid JSON: { updated: string, total: number, 
-       players: [{name, team, teamFlag, club, injury, severity, marketImpact, bettingAngle}] }`
-    : `Eres analista de bajas e impacto para la Copa Mundial FIFA 2026.
-       Responde SOLO con JSON válido: { updated: string, total: number,
-       players: [{name, team, teamFlag, club, injury, severity, marketImpact, bettingAngle}] }`;
+// ── TAB BAR (match day filter) ──
+let allMatchesCache = [];
 
-  const user = lang === 'en'
-    ? `List the confirmed player absences for the 2026 FIFA World Cup (June 2026). 
-       For each player include the injury, severity (critical/high/medium), 
-       and specific betting market impact.`
-    : `Lista las bajas confirmadas para la Copa Mundial 2026 (junio 2026).
-       Para cada jugador incluye la lesión, severidad (critical/high/medium) 
-       e impacto concreto en mercados de apuestas.`;
+document.querySelectorAll('.tab-bar').forEach(bar => {
+  bar.querySelectorAll('.tab-item').forEach(tab => {
+    tab.addEventListener('click', () => {
+      bar.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      filterMatchesByTab(tab);
+    });
+  });
+});
 
-  return await callClaude(system, user);
+function filterMatchesByTab(tab) {
+  if (!allMatchesCache.length) return;
+  const label = (tab.getAttribute('data-es') || tab.textContent.trim()).toLowerCase();
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  // todayISO and tomorrowISO defined in matchISO block above
+
+  function matchISO(m) {
+    if (!m.date) return '';
+    const parts = m.date.split(' ')[0].split('/'); // MM/DD/YYYY
+    if (parts.length < 3) return '';
+    return `${parts[2]}-${pad(String(parts[0]))}-${pad(String(parts[1]))}`;
+  }
+  // Use local date string to avoid UTC offset shifting the day
+  const localToISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const todayISO    = localToISO(now);
+  const tomorrowISO = localToISO(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
+
+  let filtered;
+  let headerLabel;
+  if (label === 'hoy' || label === 'today') {
+    filtered = allMatchesCache.filter(m => matchISO(m) === todayISO);
+    const opts = {weekday:'short',month:'short',day:'numeric'};
+    headerLabel = now.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase() + ' — ' + (currentLang==='en'?'MATCHDAY':'JORNADA') + ' 1';
+  } else if (label === 'mañana' || label === 'tomorrow') {
+    filtered = allMatchesCache.filter(m => matchISO(m) === tomorrowISO);
+    const tom = new Date(now.getTime()+86400000);
+    const opts = {weekday:'short',month:'short',day:'numeric'};
+    headerLabel = tom.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase();
+  } else {
+    // Semana / Week — next 7 days
+    filtered = allMatchesCache.filter(m => {
+      const d = matchISO(m);
+      return d >= todayISO && d <= toISO(new Date(now.getTime()+7*86400000));
+    });
+    headerLabel = currentLang==='en' ? 'NEXT 7 DAYS' : 'PRÓXIMOS 7 DÍAS';
+  }
+
+  // Update date header
+  const hdr = document.querySelector('#view-partidos .section-hdr + [style*="font-size:10px"], #view-partidos [style*="font-size:10px;color:var(--text3"]');
+  if (hdr) hdr.textContent = headerLabel;
+
+  const partGrid = document.querySelector('#view-partidos .matches-grid');
+  if (!partGrid) return;
+  if (!filtered.length) {
+    partGrid.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">
+      ${currentLang==='en'?'No matches for this period.':'No hay partidos para este período.'}
+    </div>`;
+    return;
+  }
+  partGrid.innerHTML = filtered.map(cardHTMLWithClick).join('');
 }
 
-// ── ACTION: WORLD CUP NEWS ────────────────────────────────────────────────────
-async function getWorldCupNews(lang) {
-  // Fallback: Claude generates contextual news
-  const system = lang === 'en'
-    ? 'You are a FIFA World Cup 2026 news curator. Return ONLY valid JSON: { articles: [{title, tag, source, timeAgo}] } with 8 realistic current news items about WC2026. tag must be one of: INJURY, RESULT, ODDS, PREVIEW, LINEUP. timeAgo like "2 hours ago".'
-    : 'Eres un curador de noticias de la Copa Mundial FIFA 2026. Responde SOLO con JSON: { articles: [{title, tag, source, timeAgo}] } con 8 noticias actuales sobre el Mundial 2026. tag debe ser: LESIÓN, RESULTADO, CUOTAS, PREVIEW o ALINEACIÓN. timeAgo como "Hace 2 horas".';
+// ── INIT ──
+showView('dashboard', document.querySelector('.nav-tab.active'));
 
-  const user = lang === 'en'
-    ? 'Generate 8 current World Cup 2026 news headlines for today June 12-13 2026. Mix of: injury updates (Rodrygo, Militão out for Brazil), match results (Mexico 2-0 South Africa opener), betting line movements, lineup confirmations for upcoming matches. Make them specific and realistic.'
-    : 'Genera 8 titulares de noticias actuales de la Copa Mundial 2026 para hoy 12-13 de junio 2026. Mezcla de: bajas confirmadas (Rodrygo, Militão fuera de Brasil), resultados (México 2-0 a Sudáfrica en el partido inaugural), movimientos de líneas de apuestas, confirmaciones de alineaciones para partidos próximos. Sé específico y realista.';
+// ═══════════════════════════════════════════════════════════════
+// LIVE DATA — connects to /.netlify/functions/api
+// ═══════════════════════════════════════════════════════════════
 
-  try {
-    const news = await callClaude(system, user);
-    return { ok: true, source: 'claude', articles: news.articles || [] };
-  } catch(e) {
-    return { ok: false, error: e.message, articles: [] };
-  }
-}
+const API = '/.netlify/functions/api';
 
-// ── MAIN HANDLER ───────────────────────────────────────────────────────────
-exports.handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin':  '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Content-Type': 'application/json',
-  };
-
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
-
-  const params = event.queryStringParameters || {};
-  const action = params.action || '';
-  const lang   = params.lang   || 'es';
-
-  try {
-    let result;
-
-    switch (action) {
-
-      // ── FREE endpoints (no auth needed) ──
-      case 'fixtures':
-        result = await getFixtures();
-        break;
-
-      case 'groups':
-        result = await getGroups();
-        break;
-
-      case 'weather':
-        result = await getWeather(params.venue);
-        break;
-
-      // ── Premium endpoints (Claude) ──
-      case 'analyze':
-        if (!params.home || !params.away) {
-          return { statusCode: 400, headers, body: JSON.stringify({ error: 'home and away required' }) };
-        }
-        result = await getMatchAnalysis(params.home, params.away, lang);
-        break;
-
-      case 'injuries':
-        result = await getInjuriesAnalysis(lang);
-        break;
-
-      case 'news':
-        result = await getWorldCupNews(lang);
-        break;
-
-      default:
-        return {
-          statusCode: 400, headers,
-          body: JSON.stringify({ error: `Unknown action: "${action}". Valid: fixtures, groups, weather, analyze, injuries` }),
-        };
-    }
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify(result),
-    };
-
-  } catch (err) {
-    console.error(`[api.js] action=${action} error:`, err.message);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: err.message }),
-    };
-  }
+// Flag emojis by team name
+const FLAGS = {
+  'Mexico':'🇲🇽','South Africa':'🇿🇦','South Korea':'🇰🇷','Czech Republic':'🇨🇿',
+  'Canada':'🇨🇦','Bosnia and Herzegovina':'🇧🇦','United States':'🇺🇸','Paraguay':'🇵🇾',
+  'Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','Australia':'🇦🇺','Turkey':'🇹🇷',
+  'Brazil':'🇧🇷','Morocco':'🇲🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭',
+  'Ivory Coast':'🇨🇮','Ecuador':'🇪🇨','Germany':'🇩🇪','Curaçao':'🇨🇼',
+  'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳',
+  'Iran':'🇮🇷','New Zealand':'🇳🇿','Spain':'🇪🇸','Cape Verde':'🇨🇻',
+  'Belgium':'🇧🇪','Egypt':'🇪🇬','Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾',
+  'France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶','Norway':'🇳🇴',
+  'Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
+  'Portugal':'🇵🇹','Democratic Republic of the Congo':'🇨🇩',
+  'England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿','Croatia':'🇭🇷','Uzbekistan':'🇺🇿','Colombia':'🇨🇴',
+  'Panama':'🇵🇦','Ghana':'🇬🇭','Nigeria':'🇳🇬','Cameroon':'🇨🇲',
+  'Mali':'🇲🇱','Venezuela':'🇻🇪','Chile':'🇨🇱','Peru':'🇵🇪',
+  'Honduras':'🇭🇳','Costa Rica':'🇨🇷','Jamaica':'🇯🇲','Cuba':'🇨🇺',
 };
+const flag = name => FLAGS[name] || '🏳';
+
+// Format date "06/11/2026 13:00" → "Jun 11 · 13:00"
+function fmtDate(str) {
+  if (!str) return '';
+  const [datePart, timePart] = str.split(' ');
+  if (!datePart) return str;
+  const [m, d] = datePart.split('/');
+  const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[parseInt(m)]} ${parseInt(d)} · ${timePart || ''}`;
+}
+
+// Status badge HTML
+function statusBadge(match) {
+  if (match.status === 'live')
+    return `<span class="time">● ${match.minute || 'LIVE'}</span>`;
+  if (match.status === 'finished')
+    return '';
+  return `<span class="venue">${fmtDate(match.date)}</span>`;
+}
+
+// Score display
+function scoreDisplay(match) {
+  if (match.status === 'scheduled')
+    return 'vs';
+  return `${match.homeScore ?? 0} – ${match.awayScore ?? 0}`;
+}
+
+// ── RENDER FIXTURES ────────────────────────────────────────────
+function renderFixtures(matches) {
+  // Split: live/finished today vs upcoming
+  const today = new Date().toLocaleDateString('en-US', {month:'2-digit',day:'2-digit',year:'numeric'}).replace(/\//g, '/');
+  const live     = matches.filter(m => m.status === 'live');
+  const finished = matches.filter(m => m.status === 'finished');
+  const upcoming = matches.filter(m => m.status === 'scheduled').slice(0, 8);
+
+  // Update stats strip — use local date for "today" count
+  const totalGoals = matches.reduce((s,m) => s + (parseInt(m.homeScore)||0) + (parseInt(m.awayScore)||0), 0);
+  const played = matches.filter(m => m.status === 'finished').length;
+  const nowLocal = new Date();
+  const padL = n => String(n).padStart(2,'0');
+  const todayLocal = `${padL(nowLocal.getMonth()+1)}/${padL(nowLocal.getDate())}/${nowLocal.getFullYear()}`;
+  const todayMatches = matches.filter(m => m.date && m.date.startsWith(todayLocal));
+  document.querySelectorAll('.stat-card').forEach((card, i) => {
+    const val = card.querySelector('.val');
+    if (!val) return;
+    if (i === 0) val.textContent = played;
+    if (i === 1) val.textContent = totalGoals;
+    if (i === 2) val.textContent = played ? (totalGoals/played).toFixed(2) : '0.00';
+    if (i === 3) val.textContent = todayMatches.length;
+  });
+
+  // Build match card HTML
+  const cardHTML = m => `
+    <div class="match-card" data-home="${m.home.name.replace(/"/g,'&quot;')}" data-away="${m.away.name.replace(/"/g,'&quot;')}" onclick="openDrawerFromCard(this)">
+      <div class="match-team">
+        <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
+        <span>${m.home.name}</span>
+      </div>
+      <div class="match-score">
+        ${statusBadge(m)}
+        ${scoreDisplay(m)}
+      </div>
+      <div class="match-team right">
+        <span class="flag" style="font-size:18px">${flag(m.away.name)}</span>
+        <span>${m.away.name}</span>
+      </div>
+      <div class="match-odds">
+        <button class="odd-btn" onclick="event.stopPropagation()">1</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">X</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">2</button>
+      </div>
+    </div>`;
+
+  // Today's matches only for dashboard and default partidos view
+  const todayAll = matches.filter(m => m.date && m.date.startsWith(todayLocal));
+  const todayLive     = todayAll.filter(m => m.status === 'live');
+  const todayFinished = todayAll.filter(m => m.status === 'finished');
+  const todayUpcoming = todayAll.filter(m => m.status === 'scheduled');
+  const displayToday  = [...todayLive, ...todayFinished, ...todayUpcoming];
+
+  // Dashboard — top 3 today
+  const dashGrid = document.querySelector('#view-dashboard .matches-grid');
+  if (dashGrid) dashGrid.innerHTML = displayToday.slice(0, 3).map(cardHTMLWithClick).join('');
+
+  // Partidos — all today (tab filter can change this)
+  const partGrid = document.querySelector('#view-partidos .matches-grid');
+  if (partGrid) partGrid.innerHTML = displayToday.map(cardHTMLWithClick).join('');
+
+  // Ticker — update with live matches
+  if (live.length > 0) {
+    const tickerInner = document.querySelector('.ticker-inner');
+    if (tickerInner) {
+      const liveItems = live.map(m =>
+        `<div class="ticker-item">
+          <span style="font-size:14px">${flag(m.home.name)}</span>
+          <span class="team">${m.home.name.substring(0,3).toUpperCase()}</span>
+          <span class="score">${m.homeScore}-${m.awayScore}</span>
+          <span style="font-size:14px">${flag(m.away.name)}</span>
+          <span class="team">${m.away.name.substring(0,3).toUpperCase()}</span>
+          <span class="live">● LIVE ${m.minute||''}</span>
+        </div>`
+      ).join('');
+      tickerInner.innerHTML = liveItems + liveItems; // duplicate for loop
+    }
+  }
+}
+
+// ── RENDER GROUPS ──────────────────────────────────────────────
+function renderGroups(groups) {
+  if (!groups || !groups.length) return;
+  const wrap = document.querySelector('.groups-wrap');
+  if (!wrap) return;
+
+  wrap.innerHTML = groups.map(g => {
+    const teams = g.teams || [];
+    const rows = teams.map((t, i) => {
+      const teamName = typeof t.name === 'object'
+        ? (t.name.name || Object.values(t.name)[0] || '')
+        : (t.name || '');
+      const qualified = i < 2 ? 'class="qualified"' : '';
+      return `<tr ${qualified}>
+        <td><span style="font-size:14px">${flag(teamName)}</span>${teamName}</td>
+        <td>${t.played||0}</td>
+        <td>${t.won||0}</td>
+        <td>${t.drawn||0}</td>
+        <td>${t.lost||0}</td>
+        <td>${t.gd||0}</td>
+        <td class="pts-col">${t.points||0}</td>
+      </tr>`;
+    }).join('');
+
+    return `
+      <div class="group-card">
+        <div class="group-header">
+          <span class="group-name">GRUPO ${g.name}</span>
+          <span style="font-size:9px;color:var(--text3)">${teams.length} equipos</span>
+        </div>
+        <table class="group-table">
+          <thead><tr>
+            <th data-es="Equipo" data-en="Team">Equipo</th>
+            <th>PJ</th><th>G</th><th>E</th><th>P</th><th>GD</th><th>PTS</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }).join('');
+}
+
+// ── RENDER WEATHER ─────────────────────────────────────────────
+function renderWeather(data) {
+  // Update clima section in premium view
+  const climaModule = document.getElementById('clima');
+  if (!climaModule || !data.ok) return;
+
+  const alertsHTML = (data.alerts || []).map(a =>
+    `<div class="clima-alert ${a.type === 'ok' ? 'alert-ok' : a.type === 'hot' ? 'alert-hot' : a.type === 'wind' ? 'alert-wind' : 'alert-hot'}">
+      <span data-es="${a.es}" data-en="${a.en}">${currentLang === 'en' ? a.en : a.es}</span>
+    </div>`
+  ).join('');
+
+  const forecastHTML = (data.forecast || []).slice(0,3).map((f,i) => {
+    const labels = ['Hoy','Mañana','Pasado'];
+    return `<div class="clima-card">
+      <div class="clima-venue">${labels[i]} · ${data.venue}</div>
+      <div class="clima-temp">${f.tempMaxC}°<span>C / ${Math.round(f.tempMaxC*9/5+32)}°F</span></div>
+      <div class="clima-row"><span>💧 ${data.current.humidity}%</span><span>💨 ${data.current.windKmh}km/h</span></div>
+      ${alertsHTML}
+    </div>`;
+  }).join('');
+
+  // Replace blurred content in clima module
+  const blurred = climaModule.querySelector('.blurred-content');
+  if (blurred) blurred.innerHTML = `<div class="clima-grid">${forecastHTML}</div>`;
+}
+
+// ── UPDATE NEWS SECTION ─────────────────────────────────────────
+function updateNewsDate() {
+  // Just update the "updated" timestamp on news
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'});
+  document.querySelectorAll('.tag-live').forEach(el => {
+    if (el.closest('#view-noticias')) {
+      el.textContent = `● ${timeStr}`;
+    }
+  });
+}
+
+// ── LOADING STATE ──────────────────────────────────────────────
+function setLoading(selector, msgES, msgEN) {
+  const el = document.querySelector(selector);
+  if (el) el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text3);font-size:12px">
+    <span data-es="${msgES}" data-en="${msgEN}">${currentLang==='en'?msgEN:msgES}</span>
+  </div>`;
+}
+
+// ── BOOT: FETCH ALL DATA ───────────────────────────────────────
+
+// ── UPDATE NEWS FROM LIVE FIXTURES ──────────────────────────
+function updateNewsFromFixtures(matches) {
+  const mexRSA = matches.find(m =>
+    (m.home.name === 'Mexico' && m.away.name === 'South Africa') ||
+    (m.away.name === 'Mexico' && m.home.name === 'South Africa')
+  );
+  if (!mexRSA || mexRSA.status !== 'finished') return;
+  const isMexHome = mexRSA.home.name === 'Mexico';
+  const hs = isMexHome ? mexRSA.homeScore : mexRSA.awayScore;
+  const as = isMexHome ? mexRSA.awayScore : mexRSA.homeScore;
+  const score = hs + '-' + as;
+  const el = document.getElementById('news-mex-rsa');
+  if (!el) return;
+  const esText = 'México ' + score + ' Sudáfrica — resultado final del partido inaugural';
+  const enText = 'Mexico ' + score + ' South Africa — final result of the opener';
+  el.setAttribute('data-es', esText);
+  el.setAttribute('data-en', enText);
+  el.textContent = currentLang === 'en' ? enText : esText;
+}
+
+// ── CALCULATE STANDINGS FROM FIXTURES (fallback when API is stale) ──
+function calcStandingsFromFixtures(matches) {
+  // Build standings map: group → { teamName → stats }
+  const groups = {};
+  const finished = matches.filter(m => m.status === 'finished');
+  finished.forEach(m => {
+    const grp = m.group || 'X';
+    if (!groups[grp]) groups[grp] = {};
+    const home = m.home.name;
+    const away = m.away.name;
+    const hs = parseInt(m.homeScore) || 0;
+    const as = parseInt(m.awayScore) || 0;
+    // Init teams
+    if (!groups[grp][home]) groups[grp][home] = {name:home,played:0,won:0,drawn:0,lost:0,gf:0,ga:0,gd:0,points:0};
+    if (!groups[grp][away]) groups[grp][away] = {name:away,played:0,won:0,drawn:0,lost:0,gf:0,ga:0,gd:0,points:0};
+    // Update home
+    groups[grp][home].played++;
+    groups[grp][home].gf += hs;
+    groups[grp][home].ga += as;
+    groups[grp][home].gd += (hs - as);
+    if (hs > as)      { groups[grp][home].won++;   groups[grp][home].points += 3; }
+    else if (hs === as){ groups[grp][home].drawn++; groups[grp][home].points += 1; }
+    else               { groups[grp][home].lost++; }
+    // Update away
+    groups[grp][away].played++;
+    groups[grp][away].gf += as;
+    groups[grp][away].ga += hs;
+    groups[grp][away].gd += (as - hs);
+    if (as > hs)      { groups[grp][away].won++;   groups[grp][away].points += 3; }
+    else if (as === hs){ groups[grp][away].drawn++; groups[grp][away].points += 1; }
+    else               { groups[grp][away].lost++; }
+  });
+  return groups;
+}
+
+// ── MERGE API GROUPS WITH CALCULATED STANDINGS ──────────────
+function mergeGroupsWithFixtures(apiGroups, calcGroups) {
+  return apiGroups.map(g => {
+    const calc = calcGroups[g.name] || {};
+    const teams = g.teams.map(t => {
+      const live = calc[t.name];
+      if (live) {
+        return { ...t, played: live.played, won: live.won, drawn: live.drawn,
+                 lost: live.lost, gf: live.gf, ga: live.ga, gd: live.gd, points: live.points };
+      }
+      return t;
+    }).sort((a,b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
+    return { ...g, teams };
+  });
+}
+
+// ── RENDER LIVE NEWS ──────────────────────────────────────────
+const NEWS_TAG_CLASSES = {
+  'INJURY':'nt-injury','LESIÓN':'nt-injury','RESULT':'nt-result','RESULTADO':'nt-result',
+  'ODDS':'nt-odds','CUOTAS':'nt-odds','PREVIEW':'nt-preview','LINEUP':'nt-preview','ALINEACIÓN':'nt-preview'
+};
+const NEWS_TAG_LABELS = {
+  'INJURY':'Lesión','LESIÓN':'Lesión','RESULT':'Resultado','RESULTADO':'Resultado',
+  'ODDS':'Cuotas','CUOTAS':'Cuotas','PREVIEW':'Preview','LINEUP':'Alineación','ALINEACIÓN':'Alineación'
+};
+const NEWS_TAG_LABELS_EN = {
+  'INJURY':'Injury','LESIÓN':'Injury','RESULT':'Result','RESULTADO':'Result',
+  'ODDS':'Odds','CUOTAS':'Odds','PREVIEW':'Preview','LINEUP':'Lineup','ALINEACIÓN':'Lineup'
+};
+
+function renderNews(articles) {
+  const html = articles.map(a => {
+    const tagKey = (a.tag || 'NEWS').toUpperCase();
+    const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
+    const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
+    const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
+    const src = a.source || 'IBICE Intelligence';
+    const time = a.timeAgo || (currentLang === 'en' ? 'Just now' : 'Ahora');
+    return `
+      <div class="news-card">
+        <span class="news-tag ${cls}" data-es="${labelES}" data-en="${labelEN}">${currentLang==='en'?labelEN:labelES}</span>
+        <div class="news-body">
+          <div class="news-title">${a.title}</div>
+          <div class="news-meta">${src} · ${time}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Update both news grids (dashboard top news + noticias view)
+  document.querySelectorAll('.news-grid').forEach(grid => {
+    grid.innerHTML = html;
+  });
+
+  // Update the "updated" tag
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString(currentLang==='en'?'en-US':'es-ES', {hour:'2-digit',minute:'2-digit'});
+  document.querySelectorAll('.tag-live').forEach(el => {
+    if (el.closest('#view-noticias')) el.textContent = '● ' + timeStr;
+  });
+}
+
+async function loadLiveData() {
+  // 1. Fixtures
+  setLoading('#view-dashboard .matches-grid',
+    'Cargando partidos...', 'Loading matches...');
+  setLoading('#view-partidos .matches-grid',
+    'Cargando partidos...', 'Loading matches...');
+  try {
+    const res = await fetch(`${API}?action=fixtures`);
+    const data = await res.json();
+    if (data.ok && data.matches) {
+      allMatchesCache = data.matches;
+      renderFixtures(data.matches);
+      updateNewsFromFixtures(data.matches);
+    }
+  } catch(e) {
+    console.error('fixtures error:', e);
+  }
+
+  // 2. Groups — merge API standings with our own calculation from fixtures
+  setLoading('.groups-wrap', 'Cargando grupos...', 'Loading groups...');
+  try {
+    const res = await fetch(`${API}?action=groups`);
+    const data = await res.json();
+    if (data.ok && data.groups) {
+      // Calculate our own standings from finished fixtures
+      const calcGroups = calcStandingsFromFixtures(allMatchesCache);
+      // Merge: our calculations override stale API data
+      const merged = mergeGroupsWithFixtures(data.groups, calcGroups);
+      renderGroups(merged);
+    }
+  } catch(e) {
+    console.error('groups error:', e);
+  }
+
+  // 3. Weather — load first venue (dallas) by default
+  try {
+    const res = await fetch(`${API}?action=weather&venue=dallas`);
+    const data = await res.json();
+    if (data.ok) renderWeather(data);
+  } catch(e) {
+    console.error('weather error:', e);
+  }
+
+  // 4. Live news from Claude AI
+  try {
+    const res = await fetch(`${API}?action=news&lang=${currentLang}`);
+    const data = await res.json();
+    if (data.ok && data.articles && data.articles.length) renderNews(data.articles);
+    else updateNewsDate();
+  } catch(e) {
+    updateNewsDate();
+  }
+
+  // Apply current language to any new elements
+  applyLang();
+}
+
+
+// Boot after DOM ready
+loadLiveData();
+
+// Auto-refresh every 60 seconds (for live scores)
+setInterval(async () => {
+  try {
+    const res = await fetch(`${API}?action=fixtures`);
+    const data = await res.json();
+    if (data.ok && data.matches) { allMatchesCache = data.matches; renderFixtures(data.matches); }
+  } catch(e) {}
+}, 60000);
+
+// MATCH ANALYSIS DRAWER
+// ═══════════════════════════════════════════════════════════════
+
+// Inject drawer HTML + styles once
+(function injectDrawer() {
+  const style = document.createElement('style');
+  style.textContent = `
+    .drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      z-index: 200; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s;
+    }
+    .drawer-overlay.open { opacity: 1; pointer-events: all; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: min(480px, 100vw);
+      background: #111111;
+      border-left: 0.5px solid rgba(212,175,55,0.2);
+      z-index: 201; transform: translateX(100%);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-header {
+      padding: 16px 20px 14px;
+      border-bottom: 0.5px solid rgba(212,175,55,0.12);
+      background: #181818;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .drawer-matchup {
+      display: flex; align-items: center; gap: 10px;
+      font-size: 15px; font-weight: 600; color: #f0ece0;
+    }
+    .drawer-vs {
+      font-size: 11px; color: #D4AF37;
+      font-family: 'Space Mono', monospace;
+    }
+    .drawer-close {
+      width: 28px; height: 28px; border-radius: 6px;
+      background: #222; border: 0.5px solid rgba(212,175,55,0.15);
+      color: #9a9488; font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.12s; flex-shrink: 0;
+    }
+    .drawer-close:hover { color: #f0ece0; border-color: rgba(212,175,55,0.3); }
+    .drawer-body {
+      flex: 1; overflow-y: auto; padding: 20px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    .drawer-loading {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 14px; height: 100%;
+      color: #5a5650; font-size: 13px;
+    }
+    .drawer-spinner {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 2px solid rgba(212,175,55,0.15);
+      border-top-color: #D4AF37;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .drawer-section {
+      background: #181818; border: 0.5px solid rgba(212,175,55,0.1);
+      border-radius: 10px; padding: 14px 16px;
+    }
+    .drawer-section-title {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: #5a5650; margin-bottom: 10px;
+    }
+    .drawer-summary {
+      font-size: 13px; color: #9a9488; line-height: 1.65;
+    }
+    .pick-row {
+      display: grid; grid-template-columns: 1fr auto auto;
+      align-items: center; gap: 10px; padding: 8px 0;
+      border-bottom: 0.5px solid rgba(212,175,55,0.08);
+    }
+    .pick-row:last-child { border-bottom: none; }
+    .pick-market { font-size: 11px; color: #5a5650; margin-bottom: 2px; }
+    .pick-rec { font-size: 13px; font-weight: 600; color: #f0ece0; }
+    .pick-odds {
+      font-family: 'Space Mono', monospace; font-size: 12px;
+      color: #D4AF37; background: rgba(212,175,55,0.08);
+      padding: 3px 8px; border-radius: 4px; white-space: nowrap;
+    }
+    .pick-ev {
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; white-space: nowrap;
+    }
+    .ev-pos { background: rgba(82,201,122,0.1); color: #52c97a; }
+    .ev-neg { background: rgba(224,82,82,0.1); color: #e05252; }
+    .conf-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .conf-bar-bg {
+      flex: 1; height: 3px; background: rgba(212,175,55,0.1); border-radius: 2px;
+    }
+    .conf-bar-fill {
+      height: 100%; border-radius: 2px; background: #D4AF37;
+      transition: width 0.6s ease;
+    }
+    .conf-label { font-size: 10px; color: #5a5650; white-space: nowrap; }
+    .factor-item {
+      font-size: 12px; color: #9a9488; padding: 5px 0;
+      border-bottom: 0.5px solid rgba(212,175,55,0.06);
+      display: flex; align-items: flex-start; gap: 7px; line-height: 1.5;
+    }
+    .factor-item:last-child { border-bottom: none; }
+    .factor-dot { color: #D4AF37; flex-shrink: 0; margin-top: 2px; }
+    .prediction-box {
+      background: rgba(212,175,55,0.06); border: 0.5px solid rgba(212,175,55,0.2);
+      border-radius: 8px; padding: 12px 14px; text-align: center;
+    }
+    .prediction-score {
+      font-family: 'Space Mono', monospace; font-size: 22px;
+      font-weight: 700; color: #D4AF37; margin-bottom: 4px;
+    }
+    .prediction-note { font-size: 11px; color: #5a5650; }
+    .drawer-paywall {
+      background: linear-gradient(135deg, #181818, rgba(212,175,55,0.04));
+      border: 0.5px solid rgba(212,175,55,0.2);
+      border-radius: 10px; padding: 24px 20px;
+      text-align: center; display: flex; flex-direction: column;
+      align-items: center; gap: 12px;
+    }
+    .drawer-paywall-icon { font-size: 28px; }
+    .drawer-paywall-title { font-size: 15px; font-weight: 700; color: #f0ece0; }
+    .drawer-paywall-sub { font-size: 12px; color: #9a9488; line-height: 1.5; max-width: 280px; }
+    .drawer-upgrade-btn {
+      background: #D4AF37; color: #0a0a0a; border: none;
+      padding: 11px 28px; border-radius: 8px; font-size: 13px;
+      font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .drawer-upgrade-btn:hover { opacity: 0.88; }
+  `;
+  document.head.appendChild(style);
+
+  const html = `
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+    <div class="drawer" id="matchDrawer">
+      <div class="drawer-header">
+        <div class="drawer-matchup" id="drawerMatchup">
+          <span id="drawerHome"></span>
+          <span class="drawer-vs">VS</span>
+          <span id="drawerAway"></span>
+        </div>
+        <button class="drawer-close" onclick="closeDrawer()">✕</button>
+      </div>
+      <div class="drawer-body" id="drawerBody">
+        <div class="drawer-loading">
+          <div class="drawer-spinner"></div>
+          <span id="drawerLoadingMsg">Analizando partido...</span>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+})();
+
+// Open / close
+// Helper — read team names from data attributes (avoids quote escaping issues)
+function openDrawerFromCard(el) {
+  const home = (el.getAttribute('data-home') || '').replace(/&quot;/g, '"');
+  const away = (el.getAttribute('data-away') || '').replace(/&quot;/g, '"');
+  if (home && away) openDrawer(home, away);
+}
+
+// Track current analysis request to avoid race conditions
+let _analysisToken = 0;
+
+function openDrawer(home, away) {
+  // Cancel any in-flight analysis
+  _analysisToken++;
+  const myToken = _analysisToken;
+
+  const overlay = document.getElementById('drawerOverlay');
+  const drawer  = document.getElementById('matchDrawer');
+
+  // Reset body to spinner immediately
+  const msgText = currentLang === 'en'
+    ? `Analyzing ${home} vs ${away}...`
+    : `Analizando ${home} vs ${away}...`;
+
+  document.getElementById('drawerHome').textContent = `${flag(home)} ${home}`;
+  document.getElementById('drawerAway').textContent = `${flag(away)} ${away}`;
+  document.getElementById('drawerBody').innerHTML = `
+    <div class="drawer-loading">
+      <div class="drawer-spinner"></div>
+      <span>${msgText}</span>
+    </div>`;
+
+  // Force reflow so transition plays even if drawer was already open
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  void drawer.offsetWidth;
+
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  fetchAnalysis(home, away, myToken);
+}
+
+function closeDrawer() {
+  _analysisToken++; // cancel any pending fetch render
+  const overlay = document.getElementById('drawerOverlay');
+  const drawer  = document.getElementById('matchDrawer');
+  overlay.classList.remove('open');
+  drawer.classList.remove('open');
+  document.body.style.overflow = '';
+  // Clear body after transition so next open starts clean
+  setTimeout(() => {
+    if (!drawer.classList.contains('open')) {
+      document.getElementById('drawerBody').innerHTML = '';
+    }
+  }, 320);
+}
+
+// Fetch analysis from API
+async function fetchAnalysis(home, away, token) {
+  const body = document.getElementById('drawerBody');
+  try {
+    const res  = await fetch(`${API}?action=analyze&home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&lang=${currentLang}`);
+    const data = await res.json();
+    // Only render if this request is still the current one
+    if (token !== _analysisToken) return;
+    renderAnalysis(body, home, away, data);
+  } catch(e) {
+    if (token !== _analysisToken) return;
+    body.innerHTML = `
+      <div class="drawer-loading">
+        <span style="color:#e05252">${currentLang==='en'?'Error loading analysis':'Error al cargar el análisis'}</span>
+        <button onclick="openDrawer('${home.replace(/'/g,"\'")}','${away.replace(/'/g,"\'")}')"
+          style="background:var(--gold);color:#0a0a0a;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:600">
+          ${currentLang==='en'?'Retry':'Reintentar'}
+        </button>
+      </div>`;
+  }
+}
+
+// Render full analysis
+function renderAnalysis(body, home, away, data) {
+  // If API returned an error object (not our analysis shape), show paywall
+  if (data.error || (!data.summary && !data.picks)) {
+    body.innerHTML = paywallHTML(home, away);
+    return;
+  }
+
+  const picks = (data.picks || []).map(p => {
+    const evNum = parseFloat(p.ev) || 0;
+    const evClass = evNum >= 0 ? 'ev-pos' : 'ev-neg';
+    const evLabel = evNum >= 0 ? `+${evNum.toFixed(1)}% EV` : `${evNum.toFixed(1)}% EV`;
+    const conf = Math.min(100, Math.max(0, parseInt(p.confidence) || 65));
+    return `
+      <div class="pick-row">
+        <div>
+          <div class="pick-market">${p.market || ''}</div>
+          <div class="pick-rec">${p.recommendation || ''}</div>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar-bg"><div class="conf-bar-fill" style="width:${conf}%"></div></div>
+            <span class="conf-label">${conf}% ${currentLang==='en'?'conf.':'conf.'}</span>
+          </div>
+        </div>
+        <span class="pick-odds">${p.odds || ''}</span>
+        <span class="pick-ev ${evClass}">${evLabel}</span>
+      </div>`;
+  }).join('');
+
+  const factors = (data.keyFactors || []).map(f =>
+    `<div class="factor-item"><span class="factor-dot">▸</span>${f}</div>`
+  ).join('');
+
+  const pred = data.prediction || {};
+  const predScore = pred.score || pred.result || (currentLang==='en' ? 'See analysis' : 'Ver análisis');
+
+  body.innerHTML = `
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'ANALYSIS':'ANÁLISIS'}</div>
+      <div class="drawer-summary">${data.summary || ''}</div>
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'TOP PICKS · EXPECTED VALUE':'TOP PICKS · VALOR ESPERADO'}</div>
+      ${picks || `<div class="drawer-summary">${currentLang==='en'?'No picks available':'Sin picks disponibles'}</div>`}
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'KEY FACTORS':'FACTORES CLAVE'}</div>
+      ${factors || `<div class="drawer-summary">—</div>`}
+    </div>
+
+    <div class="drawer-section">
+      <div class="drawer-section-title">${currentLang==='en'?'PREDICTION':'PREDICCIÓN'}</div>
+      <div class="prediction-box">
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:#9a9488;text-align:right;max-width:120px;line-height:1.3">${flag(home)} ${home}</span>
+          <span style="font-family:'Space Mono',monospace;font-size:26px;font-weight:700;color:#D4AF37;min-width:60px;text-align:center">${
+          pred.score || pred.result || pred.predicted_score || pred.scoreline ||
+          (pred.home_goals !== undefined && pred.away_goals !== undefined
+            ? pred.home_goals + '-' + pred.away_goals : null) ||
+          (typeof pred === 'string' ? pred : null) ||
+          (currentLang==='en' ? 'See note' : 'Ver nota')
+        }</span>
+          <span style="font-size:12px;font-weight:600;color:#9a9488;text-align:left;max-width:120px;line-height:1.3">${flag(away)} ${away}</span>
+        </div>
+        <div class="prediction-note">${pred.note || pred.confidence || pred.comment || (currentLang==='en'?'Most likely outcome based on AI analysis':'Resultado más probable según análisis AI')}</div>
+      </div>
+    </div>
+
+    <div style="font-size:10px;color:#3a3630;text-align:center;padding:8px 0;line-height:1.6">
+      ${currentLang==='en'
+        ? 'AI analysis for informational purposes only. Sports betting involves financial risk.'
+        : 'Análisis AI con fines informativos. Las apuestas deportivas conllevan riesgo financiero.'}
+    </div>`;
+}
+
+function paywallHTML(home, away) {
+  return `
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px;">
+      <div class="drawer-paywall">
+        <div class="drawer-paywall-icon">🔒</div>
+        <div class="drawer-paywall-title">
+          ${currentLang==='en'?'Premium Analysis':'Análisis Premium'}
+        </div>
+        <div class="drawer-paywall-sub">
+          ${currentLang==='en'
+            ? `Full AI breakdown of ${home} vs ${away} — picks, EV, key factors and score prediction.`
+            : `Análisis AI completo de ${home} vs ${away} — picks, EV, factores clave y predicción de marcador.`}
+        </div>
+        <button class="drawer-upgrade-btn" onclick="closeDrawer();showView('premium',null);setTimeout(()=>document.getElementById('pricing-section').scrollIntoView({behavior:'smooth'}),80)">
+          ${currentLang==='en'?'Upgrade — $9/mo':'Upgrade — $9/mes'}
+        </button>
+        <span style="font-size:10px;color:#3a3630">
+          ${currentLang==='en'?'Cancel anytime':'Cancela cuando quieras'}
+        </span>
+      </div>
+    </div>`;
+}
+
+// Patch cardHTML to add onclick — override the one in renderFixtures
+const _origCardHTML = window._cardHTML;
+function cardHTMLWithClick(m) {
+  return `
+    <div class="match-card" data-home="${m.home.name.replace(/"/g,'&quot;')}" data-away="${m.away.name.replace(/"/g,'&quot;')}" onclick="openDrawerFromCard(this)">
+      <div class="match-team">
+        <span class="flag" style="font-size:18px">${flag(m.home.name)}</span>
+        <span>${m.home.name}</span>
+      </div>
+      <div class="match-score">
+        ${statusBadge(m)}
+        ${scoreDisplay(m)}
+      </div>
+      <div class="match-team right">
+        <span class="flag" style="font-size:18px">${flag(m.away.name)}</span>
+        <span>${m.away.name}</span>
+      </div>
+      <div class="match-odds">
+        <button class="odd-btn" onclick="event.stopPropagation()">1</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">X</button>
+        <button class="odd-btn" onclick="event.stopPropagation()">2</button>
+      </div>
+    </div>`;
+}
+
+</script>
+</body>
+</html>
