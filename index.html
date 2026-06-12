@@ -1157,43 +1157,69 @@ function filterMatchesByTab(tab) {
   if (!allMatchesCache.length) return;
   const label = (tab.getAttribute('data-es') || tab.textContent.trim()).toLowerCase();
 
-  // Parse match date string "MM/DD/YYYY HH:MM" → "YYYY-MM-DD"
-  function matchDateStr(m) {
-    if (!m.date) return '';
-    const parts = m.date.split(' ')[0].split('/');
-    if (parts.length < 3) return '';
-    return parts[2] + '-' + String(parts[0]).padStart(2,'0') + '-' + String(parts[1]).padStart(2,'0');
+  // Parse match date "MM/DD/YYYY HH:MM" → {dateStr:"YYYY-MM-DD", hour:number}
+  function parseMatch(m) {
+    if (!m.date) return { dateStr: '', hour: 0 };
+    const [datePart, timePart] = m.date.split(' ');
+    const parts = datePart.split('/');
+    if (parts.length < 3) return { dateStr: '', hour: 0 };
+    const dateStr = parts[2] + '-' + String(parts[0]).padStart(2,'0') + '-' + String(parts[1]).padStart(2,'0');
+    const hour = timePart ? parseInt(timePart.split(':')[0]) : 12;
+    return { dateStr, hour };
   }
 
-  // Get today and tomorrow as YYYY-MM-DD using local browser time
-  const now = new Date();
+  // Use ET offset: Miami is UTC-4 in summer (EDT)
+  const ET_OFFSET = -4;
+  const nowUTC = new Date();
+  const nowET = new Date(nowUTC.getTime() + ET_OFFSET * 3600000);
   const pad = n => String(n).padStart(2,'0');
-  const todayISO    = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
-  const tomorrowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
-  const tomorrowISO = tomorrowDate.getFullYear() + '-' + pad(tomorrowDate.getMonth()+1) + '-' + pad(tomorrowDate.getDate());
-  const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate()+7);
-  const weekISO = weekEnd.getFullYear() + '-' + pad(weekEnd.getMonth()+1) + '-' + pad(weekEnd.getDate());
+  const toISO = d => d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate());
+  const todayISO    = toISO(nowET);
+  const tomorrowET  = new Date(nowET.getTime() + 86400000);
+  const tomorrowISO = toISO(tomorrowET);
+
+  // Week: Mon-Sun of current week in ET
+  const dayOfWeek = nowET.getUTCDay(); // 0=Sun, 1=Mon...
+  const daysToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(nowET.getTime() + daysToMon * 86400000);
+  const sunday = new Date(monday.getTime() + 6 * 86400000);
+  const weekStartISO = toISO(monday);
+  const weekEndISO   = toISO(sunday);
 
   let filtered;
   let headerLabel;
+  const months = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const monthsES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const daysES = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
 
-  if (label === 'hoy' || label === 'today') {
-    filtered = allMatchesCache.filter(m => matchDateStr(m) === todayISO);
-    const opts = {weekday:'short', month:'short', day:'numeric'};
-    headerLabel = now.toLocaleDateString(currentLang==='en'?'en-US':'es-ES', opts).toUpperCase();
-  } else if (label === 'mañana' || label === 'tomorrow') {
-    filtered = allMatchesCache.filter(m => matchDateStr(m) === tomorrowISO);
-    const opts = {weekday:'short', month:'short', day:'numeric'};
-    headerLabel = tomorrowDate.toLocaleDateString(currentLang==='en'?'en-US':'es-ES', opts).toUpperCase();
-  } else {
-    filtered = allMatchesCache.filter(m => {
-      const d = matchDateStr(m);
-      return d >= todayISO && d <= weekISO;
-    });
-    headerLabel = currentLang==='en' ? 'NEXT 7 DAYS' : 'PRÓXIMOS 7 DÍAS';
+  function dateLabel(isoStr) {
+    const [y,m,d] = isoStr.split('-');
+    const dt = new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+    const dow = dt.getDay();
+    const en = days[dow] + ' ' + months[parseInt(m)] + ' ' + parseInt(d);
+    const es = daysES[dow] + ' ' + parseInt(d) + ' ' + monthsES[parseInt(m)];
+    return currentLang === 'en' ? en.toUpperCase() : es.toUpperCase();
   }
 
-  // Update date header label
+  if (label === 'hoy' || label === 'today') {
+    filtered = allMatchesCache.filter(m => parseMatch(m).dateStr === todayISO);
+    headerLabel = dateLabel(todayISO);
+  } else if (label === 'mañana' || label === 'tomorrow') {
+    filtered = allMatchesCache.filter(m => parseMatch(m).dateStr === tomorrowISO);
+    headerLabel = dateLabel(tomorrowISO);
+  } else {
+    // Semana: Mon–Sun of current ET week
+    filtered = allMatchesCache.filter(m => {
+      const d = parseMatch(m).dateStr;
+      return d >= weekStartISO && d <= weekEndISO;
+    });
+    const enLabel = 'WEEK ' + dateLabel(weekStartISO) + ' → ' + dateLabel(weekEndISO);
+    const esLabel = 'SEMANA ' + dateLabel(weekStartISO) + ' → ' + dateLabel(weekEndISO);
+    headerLabel = currentLang === 'en' ? enLabel : esLabel;
+  }
+
+  // Update date header
   const hdr = document.querySelector('#view-partidos [style*="font-size:10px"]');
   if (hdr) hdr.textContent = headerLabel;
 
@@ -1201,9 +1227,9 @@ function filterMatchesByTab(tab) {
   if (!partGrid) return;
 
   if (!filtered.length) {
-    partGrid.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">
-      ${currentLang==='en'?'No matches for this period.':'No hay partidos para este período.'}
-    </div>`;
+    partGrid.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">' +
+      (currentLang==='en' ? 'No matches for this period.' : 'No hay partidos para este período.') +
+      '</div>';
     return;
   }
   partGrid.innerHTML = filtered.map(cardHTMLWithClick).join('');
@@ -1266,9 +1292,10 @@ function scoreDisplay(match) {
 
 // ── UPDATE STATS ONLY (without resetting match list) ──────────
 function updateStatsOnly(matches) {
-  const now = new Date();
+  // ET timezone (UTC-4 in summer)
+  const nowTk = new Date(Date.now() + (-4) * 3600000);
   const pad = n => String(n).padStart(2,'0');
-  const todayStr = pad(now.getMonth()+1) + '/' + pad(now.getDate()) + '/' + now.getFullYear();
+  const todayStr = pad(nowTk.getUTCMonth()+1) + '/' + pad(nowTk.getUTCDate()) + '/' + nowTk.getUTCFullYear();
   const totalGoals = matches.reduce((s,m) => s+(parseInt(m.homeScore)||0)+(parseInt(m.awayScore)||0), 0);
   const played = matches.filter(m => m.status==='finished').length;
   const todayCount = matches.filter(m => m.date && m.date.startsWith(todayStr)).length;
@@ -1288,9 +1315,10 @@ function buildTicker(matches) {
   if (!tickerInner) return;
 
   // Show: live first, then today's finished, then next 10 upcoming
-  const now = new Date();
+  // ET timezone (UTC-4 in summer)
+  const nowTk = new Date(Date.now() + (-4) * 3600000);
   const pad = n => String(n).padStart(2,'0');
-  const todayStr = pad(now.getMonth()+1) + '/' + pad(now.getDate()) + '/' + now.getFullYear();
+  const todayStr = pad(nowTk.getUTCMonth()+1) + '/' + pad(nowTk.getUTCDate()) + '/' + nowTk.getUTCFullYear();
 
   const live     = matches.filter(m => m.status === 'live');
   const finished = matches.filter(m => m.status === 'finished' && m.date && m.date.startsWith(todayStr));
@@ -1363,9 +1391,11 @@ function renderFixtures(matches) {
   // Update stats strip — use local date for "today" count
   const totalGoals = matches.reduce((s,m) => s + (parseInt(m.homeScore)||0) + (parseInt(m.awayScore)||0), 0);
   const played = matches.filter(m => m.status === 'finished').length;
-  const nowLocal = new Date();
+  // Use ET (UTC-4) for correct "today" in Miami
+  const etOffset = -4;
+  const nowET2 = new Date(Date.now() + etOffset * 3600000);
   const padL = n => String(n).padStart(2,'0');
-  const todayLocal = `${padL(nowLocal.getMonth()+1)}/${padL(nowLocal.getDate())}/${nowLocal.getFullYear()}`;
+  const todayLocal = padL(nowET2.getUTCMonth()+1) + '/' + padL(nowET2.getUTCDate()) + '/' + nowET2.getUTCFullYear();
   const todayMatches = matches.filter(m => m.date && m.date.startsWith(todayLocal));
   document.querySelectorAll('.stat-card').forEach((card, i) => {
     const val = card.querySelector('.val');
