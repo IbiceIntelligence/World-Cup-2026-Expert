@@ -1156,48 +1156,50 @@ document.querySelectorAll('.tab-bar').forEach(bar => {
 function filterMatchesByTab(tab) {
   if (!allMatchesCache.length) return;
   const label = (tab.getAttribute('data-es') || tab.textContent.trim()).toLowerCase();
+
+  // Parse match date string "MM/DD/YYYY HH:MM" → "YYYY-MM-DD"
+  function matchDateStr(m) {
+    if (!m.date) return '';
+    const parts = m.date.split(' ')[0].split('/');
+    if (parts.length < 3) return '';
+    return parts[2] + '-' + String(parts[0]).padStart(2,'0') + '-' + String(parts[1]).padStart(2,'0');
+  }
+
+  // Get today and tomorrow as YYYY-MM-DD using local browser time
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  const toISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  // todayISO and tomorrowISO defined in matchISO block above
-
-  function matchISO(m) {
-    if (!m.date) return '';
-    const parts = m.date.split(' ')[0].split('/'); // MM/DD/YYYY
-    if (parts.length < 3) return '';
-    return `${parts[2]}-${pad(String(parts[0]))}-${pad(String(parts[1]))}`;
-  }
-  // Use local date string to avoid UTC offset shifting the day
-  const localToISO = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  const todayISO    = localToISO(now);
-  const tomorrowISO = localToISO(new Date(now.getFullYear(), now.getMonth(), now.getDate()+1));
+  const todayISO    = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
+  const tomorrowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1);
+  const tomorrowISO = tomorrowDate.getFullYear() + '-' + pad(tomorrowDate.getMonth()+1) + '-' + pad(tomorrowDate.getDate());
+  const weekEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate()+7);
+  const weekISO = weekEnd.getFullYear() + '-' + pad(weekEnd.getMonth()+1) + '-' + pad(weekEnd.getDate());
 
   let filtered;
   let headerLabel;
+
   if (label === 'hoy' || label === 'today') {
-    filtered = allMatchesCache.filter(m => matchISO(m) === todayISO);
-    const opts = {weekday:'short',month:'short',day:'numeric'};
-    headerLabel = now.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase() + ' — ' + (currentLang==='en'?'MATCHDAY':'JORNADA') + ' 1';
+    filtered = allMatchesCache.filter(m => matchDateStr(m) === todayISO);
+    const opts = {weekday:'short', month:'short', day:'numeric'};
+    headerLabel = now.toLocaleDateString(currentLang==='en'?'en-US':'es-ES', opts).toUpperCase();
   } else if (label === 'mañana' || label === 'tomorrow') {
-    filtered = allMatchesCache.filter(m => matchISO(m) === tomorrowISO);
-    const tom = new Date(now.getTime()+86400000);
-    const opts = {weekday:'short',month:'short',day:'numeric'};
-    headerLabel = tom.toLocaleDateString(currentLang==='en'?'en-US':'es-ES',opts).toUpperCase();
+    filtered = allMatchesCache.filter(m => matchDateStr(m) === tomorrowISO);
+    const opts = {weekday:'short', month:'short', day:'numeric'};
+    headerLabel = tomorrowDate.toLocaleDateString(currentLang==='en'?'en-US':'es-ES', opts).toUpperCase();
   } else {
-    // Semana / Week — next 7 days
     filtered = allMatchesCache.filter(m => {
-      const d = matchISO(m);
-      return d >= todayISO && d <= toISO(new Date(now.getTime()+7*86400000));
+      const d = matchDateStr(m);
+      return d >= todayISO && d <= weekISO;
     });
     headerLabel = currentLang==='en' ? 'NEXT 7 DAYS' : 'PRÓXIMOS 7 DÍAS';
   }
 
-  // Update date header
-  const hdr = document.querySelector('#view-partidos .section-hdr + [style*="font-size:10px"], #view-partidos [style*="font-size:10px;color:var(--text3"]');
+  // Update date header label
+  const hdr = document.querySelector('#view-partidos [style*="font-size:10px"]');
   if (hdr) hdr.textContent = headerLabel;
 
   const partGrid = document.querySelector('#view-partidos .matches-grid');
   if (!partGrid) return;
+
   if (!filtered.length) {
     partGrid.innerHTML = `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">
       ${currentLang==='en'?'No matches for this period.':'No hay partidos para este período.'}
@@ -1260,6 +1262,24 @@ function scoreDisplay(match) {
   if (match.status === 'scheduled')
     return 'vs';
   return `${match.homeScore ?? 0} – ${match.awayScore ?? 0}`;
+}
+
+// ── UPDATE STATS ONLY (without resetting match list) ──────────
+function updateStatsOnly(matches) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const todayStr = pad(now.getMonth()+1) + '/' + pad(now.getDate()) + '/' + now.getFullYear();
+  const totalGoals = matches.reduce((s,m) => s+(parseInt(m.homeScore)||0)+(parseInt(m.awayScore)||0), 0);
+  const played = matches.filter(m => m.status==='finished').length;
+  const todayCount = matches.filter(m => m.date && m.date.startsWith(todayStr)).length;
+  document.querySelectorAll('.stat-card').forEach((card,i) => {
+    const val = card.querySelector('.val');
+    if (!val) return;
+    if (i===0) val.textContent = played;
+    if (i===1) val.textContent = totalGoals;
+    if (i===2) val.textContent = played?(totalGoals/played).toFixed(2):'0.00';
+    if (i===3) val.textContent = todayCount;
+  });
 }
 
 // ── BUILD TICKER FROM REAL FIXTURES ──────────────────────────
@@ -1741,12 +1761,24 @@ async function loadLiveData() {
 // Boot after DOM ready
 loadLiveData();
 
-// Auto-refresh every 60 seconds (for live scores)
+// Auto-refresh every 60 seconds — respects active tab filter
 setInterval(async () => {
   try {
     const res = await fetch(`${API}?action=fixtures`);
     const data = await res.json();
-    if (data.ok && data.matches) { allMatchesCache = data.matches; renderFixtures(data.matches); }
+    if (data.ok && data.matches) {
+      allMatchesCache = data.matches;
+      // Only re-render if user is on dashboard or on "Hoy" tab
+      const activeTab = document.querySelector('#view-partidos .tab-item.active');
+      const activeTabLabel = activeTab ? (activeTab.getAttribute('data-es') || '').toLowerCase() : 'hoy';
+      if (activeTabLabel === 'hoy' || activeTabLabel === 'today') {
+        renderFixtures(data.matches);
+      } else {
+        // Just update stats and ticker without resetting the tab view
+        updateStatsOnly(data.matches);
+        buildTicker(data.matches);
+      }
+    }
   } catch(e) {}
 }, 60000);
 
