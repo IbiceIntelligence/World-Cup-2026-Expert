@@ -304,7 +304,13 @@ async function parseRSS(url, sourceLabel, tagDefault) {
       const pubDate = (block.match(/<pubDate>(.*?)<\/pubDate>/))?.[1]?.trim();
       const url = (block.match(/<link>(.*?)<\/link>/) ||
                    block.match(/<guid[^>]*>(https?:\/\/[^<]+)<\/guid>/))?.[1]?.trim();
+      // Also grab description for better tag classification
+      const desc = ((block.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>/) ||
+                     block.match(/<description>(.*?)<\/description>/))?.[1] || '')
+                     .replace(/<[^>]+>/g, '').trim().substring(0, 200);
       if (!title || title.length < 5) continue;
+      // Combined text for classification
+      const fullText = title + ' ' + desc;
       let timeAgo = 'Recently';
       if (pubDate) {
         const diff = Math.floor((Date.now() - new Date(pubDate).getTime()) / 60000);
@@ -312,19 +318,17 @@ async function parseRSS(url, sourceLabel, tagDefault) {
         else if (diff < 1440) timeAgo = Math.floor(diff/60) + ' hours ago';
         else timeAgo = Math.floor(diff/1440) + ' days ago';
       }
-      // Classify tag from title keywords
+      // Classify using title + description combined
       let tag = 'PREVIEW';
-      const t = title.toLowerCase();
-      if (/injur|ruled out|out for|misses|miss |pulled out|sidelined|baja|lesion|acl|hamstring|ankle|knee|tear|strain|absent|doubtful/.test(t))
+      const t = (fullText || title).toLowerCase();
+      if (/injur|ruled out|out for|misses|sidelined|baja |lesion|acl|hamstring|ankle|knee|strain|absent|doubtful|denied entry|fitness concern|won.t feature/.test(t))
         tag = 'INJURY';
-      else if (/beats|beat |defeat|wins |won |victory|scores|scored|[0-9]-[0-9]|result|final score|equalise|equaliz|comeback|thrash|demolish|gana |derrota|resultado/.test(t))
+      else if (/beats |beat |defeat|wins |won |victory|scores |scored|[0-9]-[0-9]|equalis|equaliz|comeback|thrash|hammer|clinch|advance|gana |derrota |resultado|full.time/.test(t))
         tag = 'RESULT';
-      else if (/odds|betting|favorite|favourite|line move|wager|punt|bet |price|boost|drifts|shortens|cuotas|apuesta/.test(t))
+      else if (/odds|betting|favorite|favourite|line move|wager| bet |price boost|drifts|shortens|cuotas|apuesta|moneyline/.test(t))
         tag = 'ODDS';
-      else if (/lineup|line-up|line up|starting|eleven|xi |squad|selected|named|picks|confirmed team|alineacion|convocatoria/.test(t))
+      else if (/lineup|line-up|starting xi|starting eleven| xi |squad named|confirmed team|alineaci|convocatoria|who starts|expected team/.test(t))
         tag = 'LINEUP';
-      else if (/preview|prediction|expect|preview|head-to-head|h2h|key battle|tactical|formation|analysis/.test(t))
-        tag = 'PREVIEW';
       items.push({ title, tag, source: sourceLabel, timeAgo, url: url || null });
     }
     return items;
@@ -347,10 +351,10 @@ async function getWorldCupNews(lang) {
   ];
 
   const RSS_ES = [
-    { url: 'https://e00-marca.uecdn.es/rss/futbol/futbol-internacional.xml', source: 'Marca' },
-    { url: 'https://feeds.as.com/mrss-s/pages/as/site/as.com/section/futbol/subsection/internacional/', source: 'AS' },
-    { url: 'https://www.tycsports.com/rss/',                   source: 'TyC Sports'  },
-    { url: 'https://www.goal.com/feeds/es/news',               source: 'Goal.com ES' },
+    { url: 'https://www.espndeportes.espn.com/espndeportes/rss/soccer/news', source: 'ESPN Deportes' },
+    { url: 'https://feeds.bbci.co.uk/mundo/deportes/rss.xml',               source: 'BBC Mundo'     },
+    { url: 'https://www.goal.com/feeds/es/news',                             source: 'Goal.com ES'   },
+    { url: 'https://www.tycsports.com/rss/',                                 source: 'TyC Sports'    },
   ];
 
   const sources = isES ? RSS_ES : RSS_EN;
