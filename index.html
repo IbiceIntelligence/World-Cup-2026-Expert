@@ -1606,8 +1606,9 @@ function updateNewsFromFixtures(matches) {
 // ── CALCULATE STANDINGS FROM FIXTURES (fallback when API is stale) ──
 function calcStandingsFromFixtures(matches) {
   // Build standings map: group → { teamName → stats }
+  // Include LIVE matches with current score (shown as in-progress)
   const groups = {};
-  const finished = matches.filter(m => m.status === 'finished');
+  const finished = matches.filter(m => m.status === 'finished' || m.status === 'live');
   finished.forEach(m => {
     const grp = m.group || 'X';
     if (!groups[grp]) groups[grp] = {};
