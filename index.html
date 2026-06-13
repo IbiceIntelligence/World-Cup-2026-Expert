@@ -1725,7 +1725,7 @@ document.addEventListener('click', function(e) {
 function renderNews(articles) {
   const html = articles.map(a => {
     // Re-classify from title (more accurate than RSS default)
-    const tagKey = classifyNewsTag(a.title) || (a.tag || 'NEWS').toUpperCase();
+    const tagKey = (a.tag || 'NEWS').toUpperCase();
     const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
     const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
@@ -1748,7 +1748,7 @@ function renderNews(articles) {
   // Update dashboard news grid (top 6)
   const dashGrid2 = document.getElementById('dash-news-grid');
   if (dashGrid2) dashGrid2.innerHTML = articles.slice(0, 6).map(a => {
-    const tagKey = classifyNewsTag(a.title) || (a.tag || 'NEWS').toUpperCase();
+    const tagKey = (a.tag || 'NEWS').toUpperCase();
     const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
     const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
