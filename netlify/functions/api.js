@@ -318,16 +318,16 @@ async function parseRSS(url, sourceLabel, tagDefault) {
         else if (diff < 1440) timeAgo = Math.floor(diff/60) + ' hours ago';
         else timeAgo = Math.floor(diff/1440) + ' days ago';
       }
-      // Classify using title + description combined
+      // Classify tag — bilingual ES+EN keywords, single-line regexes
       let tag = 'PREVIEW';
       const t = (fullText || title).toLowerCase();
-      if (/injur|ruled out|out for|misses|sidelined|baja |lesion|acl|hamstring|ankle|knee|strain|absent|doubtful|denied entry|fitness concern|won.t feature/.test(t))
+      if (/injur|ruled out|out for|misses|sidelined|won.t feature|fitness concern|lesion|baja |sin jugar|descartado|se pierde|fuera del|no podra|acl|ligamento|rotura|desgarro|esguince|fractura|denied entry|neg.* la visa|visa negada|no pudo viajar|le neg|sin visa|visa denegada/.test(t))
         tag = 'INJURY';
-      else if (/beats |beat |defeat|wins |won |victory|scores |scored|[0-9]-[0-9]|equalis|equaliz|comeback|thrash|hammer|clinch|advance|gana |derrota |resultado|full.time/.test(t))
+      else if (/beats |beat |defeat|wins |won |victory|equalis|equaliz|thrash|clinch|gana |gano |vencio|derrota|empat|logra|logro|consigue|primer punto|primer gol|debut con|estrena con|[0-9]-[0-9]|[0-9] a [0-9]|saca la casta|avanza|clasifica/.test(t))
         tag = 'RESULT';
-      else if (/odds|betting|favorite|favourite|line move|wager| bet |price boost|drifts|shortens|cuotas|apuesta|moneyline/.test(t))
+      else if (/odds|betting|favorite|favourite|wager| bet |moneyline|cuotas|apuesta|favorito|cotiza|momio|casas de apuesta|apuestas deportivas/.test(t))
         tag = 'ODDS';
-      else if (/lineup|line-up|starting xi|starting eleven| xi |squad named|confirmed team|alineaci|convocatoria|who starts|expected team/.test(t))
+      else if (/lineup|line-up|starting xi|starting eleven|squad named|confirmed team|alineaci|convocatoria|once inicial|titulares|jugara de inicio|lista de convocados|once confirmado/.test(t))
         tag = 'LINEUP';
       items.push({ title, tag, source: sourceLabel, timeAgo, url: url || null });
     }
