@@ -352,7 +352,7 @@ async function getWorldCupNews(lang) {
 
   const RSS_ES = [
     { url: 'https://www.espndeportes.espn.com/espndeportes/rss/soccer/news', source: 'ESPN Deportes' },
-    { url: 'https://feeds.bbci.co.uk/mundo/deportes/rss.xml',               source: 'BBC Mundo'     },
+    { url: 'https://feeds.bbci.co.uk/mundo/deportes/futbol/rss.xml',          source: 'BBC Mundo'     },
     { url: 'https://www.goal.com/feeds/es/news',                             source: 'Goal.com ES'   },
     { url: 'https://www.tycsports.com/rss/',                                 source: 'TyC Sports'    },
   ];
@@ -391,15 +391,20 @@ async function getWorldCupNews(lang) {
     return true;
   });
 
-  // WC articles first
+  // WC articles first, then other football — for ES only show football/soccer topics
   const wcFirst = unique.filter(a =>
-    /world cup|mundial|fifa|wc2026|2026|copa del mundo/i.test(a.title)
+    /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
   );
-  const other = unique.filter(a =>
-    !/world cup|mundial|fifa|wc2026|2026|copa del mundo/i.test(a.title)
-  );
+  const footballOther = unique.filter(a => {
+    const t = a.title.toLowerCase();
+    const isWC = /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title);
+    if (isWC) return false;
+    // For ES: only include if it's about football/soccer
+    if (isES) return /futbol|fútbol|soccer|gol|partido|seleccion|selección|equipo|jugador|liga|champions|balompié/.test(t);
+    return true;
+  });
 
-  const final = [...wcFirst, ...other].slice(0, 8);
+  const final = [...wcFirst, ...footballOther].slice(0, 8);
 
   if (final.length > 0) {
     return { ok: true, source: 'rss', articles: final };
