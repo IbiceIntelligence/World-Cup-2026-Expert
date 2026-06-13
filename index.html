@@ -1258,17 +1258,34 @@ const FLAGS = {
 };
 const flag = name => FLAGS[name] || '🏳';
 
-// Match effective date
-// 00:00 kickoffs mean midnight START of the NEXT calendar day (e.g. Jun 13 00:00 = Jun 14)
+// Known API date/time corrections (API has wrong times for some matches)
+// Source: CBS Sports / Yahoo Sports official schedule
+const MATCH_DATE_CORRECTIONS = {
+  'Australia-Turkey':   '2026-06-14',
+  'Turkey-Australia':   '2026-06-14',
+  'Austria-Jordan':     '2026-06-17',
+  'Jordan-Austria':     '2026-06-17',
+  'Turkey-Paraguay':    '2026-06-20',
+  'Paraguay-Turkey':    '2026-06-20',
+  'Tunisia-Japan':      '2026-06-21',
+  'Japan-Tunisia':      '2026-06-21',
+};
+
 function matchEffectiveDateStr(m) {
   if (!m.date) return '';
+  // Check correction map first
+  const homeAway = (m.home && m.away)
+    ? m.home.name + '-' + m.away.name
+    : '';
+  if (MATCH_DATE_CORRECTIONS[homeAway]) return MATCH_DATE_CORRECTIONS[homeAway];
+
   const [datePart, timePart] = m.date.split(' ');
   const parts = datePart ? datePart.split('/') : [];
   if (parts.length < 3) return '';
   const hour = timePart ? parseInt(timePart.split(':')[0]) : 12;
   const min  = timePart ? parseInt((timePart.split(':')[1])||0) : 0;
   const dt = new Date(parseInt(parts[2]), parseInt(parts[0])-1, parseInt(parts[1]), hour, min, 0);
-  // 00:00 exactly = midnight = start of next day
+  // 00:00 exactly = start of next calendar day
   const effective = (hour === 0 && min === 0)
     ? new Date(dt.getTime() + 86400000)
     : dt;
@@ -1649,6 +1666,20 @@ const NEWS_TAG_LABELS_EN = {
   'NEWS':'News','NOTICIAS':'News'
 };
 
+// Re-classify tag from article title (overrides RSS default tag)
+function classifyNewsTag(title) {
+  const t = (title || '').toLowerCase();
+  if (/injur|ruled out|out for |misses |miss the|sidelined|baja|lesion|acl|hamstring|ankle|knee tear|strain|absent|doubtful|denied entry|won't play|will not play/.test(t))
+    return 'INJURY';
+  if (/beats?|beat|defeat|wins?|won|victory|scores?|scored|\d-\d|result|final score|equalis|equaliz|comeback|thrash|hammers?|clinch|advances?|gana|derrota|resultado/.test(t))
+    return 'RESULT';
+  if (/odds|betting|favou?rite|line move|wager|punt|bet|price boost|drifts|shortens|cuotas|apuesta|moneyline|spread/.test(t))
+    return 'ODDS';
+  if (/line.?up|starting.?xi|starting.?eleven|xi|squad named|selected|confirmed team|alineaci|convocatoria|who starts|expected team/.test(t))
+    return 'LINEUP';
+  return 'PREVIEW';
+}
+
 function openNewsUrl(url, title) {
   if (url && url.startsWith('http')) {
     // Real RSS article — open directly
@@ -1681,7 +1712,8 @@ document.addEventListener('click', function(e) {
 
 function renderNews(articles) {
   const html = articles.map(a => {
-    const tagKey = (a.tag || 'NEWS').toUpperCase();
+    // Re-classify from title (more accurate than RSS default)
+    const tagKey = classifyNewsTag(a.title) || (a.tag || 'NEWS').toUpperCase();
     const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
     const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
@@ -1704,7 +1736,7 @@ function renderNews(articles) {
   // Update dashboard news grid (top 6)
   const dashGrid2 = document.getElementById('dash-news-grid');
   if (dashGrid2) dashGrid2.innerHTML = articles.slice(0, 6).map(a => {
-    const tagKey = (a.tag || 'NEWS').toUpperCase();
+    const tagKey = classifyNewsTag(a.title) || (a.tag || 'NEWS').toUpperCase();
     const cls = NEWS_TAG_CLASSES[tagKey] || 'nt-preview';
     const labelES = NEWS_TAG_LABELS[tagKey] || a.tag;
     const labelEN = NEWS_TAG_LABELS_EN[tagKey] || a.tag;
