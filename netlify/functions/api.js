@@ -337,18 +337,27 @@ async function parseRSS(url, sourceLabel, tagDefault) {
 async function getWorldCupNews(lang) {
   const articles = [];
 
-  // RSS sources — all free, no auth, real journalism
-  const RSS_SOURCES = [
-    { url: 'https://www.espn.com/espn/rss/soccer/news',          source: 'ESPN FC'    },
-    { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml',    source: 'BBC Sport'  },
-    { url: 'https://www.goal.com/feeds/en/news',                  source: 'Goal.com'   },
-    { url: 'https://www.fourfourtwo.com/rss',                     source: 'FourFourTwo'},
-    { url: 'https://www.skysports.com/rss/12040',                 source: 'Sky Sports' },
+  // RSS sources by language
+  const RSS_EN = [
+    { url: 'https://www.espn.com/espn/rss/soccer/news',       source: 'ESPN FC'     },
+    { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', source: 'BBC Sport'   },
+    { url: 'https://www.goal.com/feeds/en/news',               source: 'Goal.com'    },
+    { url: 'https://www.fourfourtwo.com/rss',                  source: 'FourFourTwo' },
+    { url: 'https://www.skysports.com/rss/12040',              source: 'Sky Sports'  },
   ];
 
-  // Fetch all RSS sources in parallel with 6s timeout each
+  const RSS_ES = [
+    { url: 'https://e00-marca.uecdn.es/rss/futbol/futbol-internacional.xml', source: 'Marca'        },
+    { url: 'https://feeds.as.com/mrss-s/pages/as/site/as.com/section/futbol/subsection/internacional/', source: 'AS' },
+    { url: 'https://www.espn.com/espn/rss/soccer/news',       source: 'ESPN FC'     },
+    { url: 'https://feeds.bbci.co.uk/sport/football/rss.xml', source: 'BBC Sport'   },
+    { url: 'https://www.goal.com/feeds/es/news',               source: 'Goal.com'    },
+  ];
+
+  const sources = lang === 'es' ? RSS_ES : RSS_EN;
+
   const results = await Promise.allSettled(
-    RSS_SOURCES.map(s => parseRSS(s.url, s.source, 'PREVIEW'))
+    sources.map(s => parseRSS(s.url, s.source, 'PREVIEW'))
   );
 
   results.forEach(r => {
@@ -357,7 +366,7 @@ async function getWorldCupNews(lang) {
     }
   });
 
-  // Deduplicate by title
+  // Deduplicate
   const seen = new Set();
   const unique = articles.filter(a => {
     const key = a.title.slice(0, 50).toLowerCase();
@@ -366,29 +375,23 @@ async function getWorldCupNews(lang) {
     return true;
   });
 
-  // Filter: prefer World Cup articles, but include any football news
+  // WC articles first, then other football
   const wcFirst = unique.filter(a =>
-    /world cup|mundial|fifa|wc2026|2026/i.test(a.title)
+    /world cup|mundial|fifa|wc2026|2026|copa del mundo/i.test(a.title)
   );
   const otherFootball = unique.filter(a =>
-    !/world cup|mundial|fifa|wc2026|2026/i.test(a.title)
+    !/world cup|mundial|fifa|wc2026|2026|copa del mundo/i.test(a.title)
   );
 
-  // Build final list: WC news first, fill with football news if needed
   const final = [...wcFirst, ...otherFootball].slice(0, 8);
 
   if (final.length > 0) {
     return { ok: true, source: 'rss', articles: final };
   }
 
-  // All RSS sources failed — return empty (no invented news)
-  return {
-    ok: false,
-    source: 'none',
-    articles: [],
-    error: 'All RSS sources unavailable. No news to display.'
-  };
+  return { ok: false, source: 'none', articles: [], error: 'All RSS sources unavailable.' };
 }
+
 
 
 
