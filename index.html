@@ -1858,26 +1858,43 @@ async function loadLiveData() {
 // Boot after DOM ready
 loadLiveData();
 
-// Auto-refresh every 60 seconds — respects active tab filter
-setInterval(async () => {
-  try {
-    const res = await fetch(`${API}?action=fixtures`);
-    const data = await res.json();
-    if (data.ok && data.matches) {
-      allMatchesCache = data.matches;
-      // Only re-render if user is on dashboard or on "Hoy" tab
-      const activeTab = document.querySelector('#view-partidos .tab-item.active');
-      const activeTabLabel = activeTab ? (activeTab.getAttribute('data-es') || '').toLowerCase() : 'hoy';
-      if (activeTabLabel === 'hoy' || activeTabLabel === 'today') {
-        renderFixtures(data.matches);
-      } else {
-        // Just update stats and ticker without resetting the tab view
-        updateStatsOnly(data.matches);
-        buildTicker(data.matches);
+// Auto-refresh — 20s when live matches, 60s otherwise
+function scheduleRefresh() {
+  const hasLive = allMatchesCache.some(m => m.status === 'live');
+  const interval = hasLive ? 20000 : 60000;
+  setTimeout(async () => {
+    try {
+      const res = await fetch(`${API}?action=fixtures`);
+      const data = await res.json();
+      if (data.ok && data.matches) {
+        allMatchesCache = data.matches;
+        const activeTab = document.querySelector('#view-partidos .tab-item.active');
+        const activeTabLabel = activeTab ? (activeTab.getAttribute('data-es') || '').toLowerCase() : 'hoy';
+        if (activeTabLabel === 'hoy' || activeTabLabel === 'today') {
+          renderFixtures(data.matches);
+        } else {
+          updateStatsOnly(data.matches);
+          buildTicker(data.matches);
+        }
+        // Always update groups silently from calculated standings
+        const calcGroups = calcStandingsFromFixtures(data.matches);
+        // Only re-render groups if user is viewing that section
+        const groupsVisible = document.getElementById('view-grupos').classList.contains('active');
+        if (groupsVisible && Object.keys(calcGroups).length > 0) {
+          // Re-fetch API groups and merge with live calc
+          fetch(`${API}?action=groups`).then(r => r.json()).then(gd => {
+            if (gd.ok && gd.groups) {
+              const merged = mergeGroupsWithFixtures(gd.groups, calcGroups);
+              renderGroups(merged);
+            }
+          }).catch(() => {});
+        }
       }
-    }
-  } catch(e) {}
-}, 60000);
+    } catch(e) {}
+    scheduleRefresh();
+  }, interval);
+}
+scheduleRefresh();
 
 // MATCH ANALYSIS DRAWER
 // ═══════════════════════════════════════════════════════════════
