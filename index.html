@@ -1681,13 +1681,13 @@ const NEWS_TAG_LABELS_EN = {
 // Re-classify tag from article title (overrides RSS default tag)
 function classifyNewsTag(title) {
   const t = (title || '').toLowerCase();
-  if (/injur|ruled out|out for |misses |miss the|sidelined|baja|lesion|acl|hamstring|ankle|knee tear|strain|absent|doubtful|denied entry|won't play|will not play/.test(t))
+  if (/injur|ruled out|out for|misses|sidelined|baja |lesion|acl|hamstring|ankle|knee|strain|absent|doubtful|denied entry|won.t play|fitness concern/.test(t))
     return 'INJURY';
-  if (/beats?|beat|defeat|wins?|won|victory|scores?|scored|\d-\d|result|final score|equalis|equaliz|comeback|thrash|hammers?|clinch|advances?|gana|derrota|resultado/.test(t))
+  if (/beats |beat |defeat|wins |won |victory|scores |scored|[0-9]-[0-9]|equalise|equaliz|comeback|thrash|hammer|clinch|advances|gana |derrota |resultado/.test(t))
     return 'RESULT';
-  if (/odds|betting|favou?rite|line move|wager|punt|bet|price boost|drifts|shortens|cuotas|apuesta|moneyline|spread/.test(t))
+  if (/odds|betting|favorite|favourite|line move|wager| bet |price boost|drifts|shortens|cuotas|apuesta|moneyline|spread/.test(t))
     return 'ODDS';
-  if (/line.?up|starting.?xi|starting.?eleven|xi|squad named|selected|confirmed team|alineaci|convocatoria|who starts|expected team/.test(t))
+  if (/lineup|line-up|starting xi|starting eleven| xi |squad named|confirmed team|alineaci|convocatoria|who starts|expected team|named his/.test(t))
     return 'LINEUP';
   return 'PREVIEW';
 }
