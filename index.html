@@ -142,8 +142,10 @@ main { padding: 24px; }
 .news-card:hover { border-color: var(--border2); }
 .news-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
 .nt-injury { background: rgba(224,82,82,0.12); color: var(--red); }
+.nt-baja { background: rgba(255,140,0,0.12); color: #ff8c00; }
 .nt-odds { background: rgba(212,175,55,0.1); color: var(--gold); }
 .nt-result { background: rgba(82,201,122,0.1); color: var(--green); }
+.nt-admin { background: rgba(155,114,239,0.1); color: var(--purple); }
 .nt-preview { background: rgba(74,158,255,0.1); color: var(--blue); }
 .news-body { flex: 1; }
 .news-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; line-height: 1.4; }
@@ -1655,24 +1657,30 @@ function mergeGroupsWithFixtures(apiGroups, calcGroups) {
 // ── RENDER LIVE NEWS ──────────────────────────────────────────
 const NEWS_TAG_CLASSES = {
   'INJURY':'nt-injury','LESIÓN':'nt-injury','LESION':'nt-injury',
+  'BAJA':'nt-baja',
   'RESULT':'nt-result','RESULTADO':'nt-result',
   'ODDS':'nt-odds','CUOTAS':'nt-odds','BETTING':'nt-odds',
+  'ADMIN':'nt-admin',
   'PREVIEW':'nt-preview','ANÁLISIS':'nt-preview','ANALYSIS':'nt-preview',
   'LINEUP':'nt-preview','ALINEACIÓN':'nt-preview','ALINEACION':'nt-preview',
   'NEWS':'nt-preview','NOTICIAS':'nt-preview'
 };
 const NEWS_TAG_LABELS = {
   'INJURY':'Lesión','LESIÓN':'Lesión','LESION':'Lesión',
+  'BAJA':'Baja',
   'RESULT':'Resultado','RESULTADO':'Resultado',
   'ODDS':'Cuotas','CUOTAS':'Cuotas','BETTING':'Cuotas',
+  'ADMIN':'Oficial',
   'PREVIEW':'Preview','ANÁLISIS':'Análisis','ANALYSIS':'Análisis',
   'LINEUP':'Alineación','ALINEACIÓN':'Alineación','ALINEACION':'Alineación',
   'NEWS':'Noticia','NOTICIAS':'Noticia'
 };
 const NEWS_TAG_LABELS_EN = {
   'INJURY':'Injury','LESIÓN':'Injury','LESION':'Injury',
+  'BAJA':'Absence',
   'RESULT':'Result','RESULTADO':'Result',
   'ODDS':'Odds','CUOTAS':'Odds','BETTING':'Odds',
+  'ADMIN':'Official',
   'PREVIEW':'Preview','ANÁLISIS':'Analysis','ANALYSIS':'Analysis',
   'LINEUP':'Lineup','ALINEACIÓN':'Lineup','ALINEACION':'Lineup',
   'NEWS':'News','NOTICIAS':'News'
