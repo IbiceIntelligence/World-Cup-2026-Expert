@@ -1876,18 +1876,18 @@ function scheduleRefresh() {
           updateStatsOnly(data.matches);
           buildTicker(data.matches);
         }
-        // Always update groups silently from calculated standings
-        const calcGroups = calcStandingsFromFixtures(data.matches);
-        // Only re-render groups if user is viewing that section
+        // Update groups directly from fixtures — no extra API call needed
         const groupsVisible = document.getElementById('view-grupos').classList.contains('active');
-        if (groupsVisible && Object.keys(calcGroups).length > 0) {
-          // Re-fetch API groups and merge with live calc
-          fetch(`${API}?action=groups`).then(r => r.json()).then(gd => {
-            if (gd.ok && gd.groups) {
-              const merged = mergeGroupsWithFixtures(gd.groups, calcGroups);
-              renderGroups(merged);
-            }
-          }).catch(() => {});
+        if (groupsVisible) {
+          const calcGroups = calcStandingsFromFixtures(data.matches);
+          if (Object.keys(calcGroups).length > 0) {
+            // Build group list directly from calc without API
+            const groupList = Object.entries(calcGroups).map(([name, teams]) => ({
+              name,
+              teams: Object.values(teams).sort((a,b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
+            })).sort((a,b) => a.name.localeCompare(b.name));
+            if (groupList.length > 0) renderGroups(groupList);
+          }
         }
       }
     } catch(e) {}
