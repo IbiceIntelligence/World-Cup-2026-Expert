@@ -1274,28 +1274,107 @@ const flag = name => FLAGS[name] || '🏳';
 
 // Known API date/time corrections (API has wrong times for some matches)
 // Source: CBS Sports / Yahoo Sports official schedule
-const MATCH_DATE_CORRECTIONS = {
-  'Australia-Turkey':   '2026-06-14',
-  'Turkey-Australia':   '2026-06-14',
-  'Austria-Jordan':     '2026-06-17',
-  'Jordan-Austria':     '2026-06-17',
-  'Turkey-Paraguay':    '2026-06-20',
-  'Paraguay-Turkey':    '2026-06-20',
-  'Tunisia-Japan':      '2026-06-21',
-  'Japan-Tunisia':      '2026-06-21',
+// Official FIFA World Cup 2026 schedule — all times ET
+// Source: worldcuppass.com / FIFA official
+const OFFICIAL_SCHEDULE = {
+  // GROUP A — Jun 11
+  'Mexico-South Africa':                    { date:'2026-06-11', display:'Jun 11 · 15:00' },
+  'South Africa-Mexico':                    { date:'2026-06-11', display:'Jun 11 · 15:00' },
+  'South Korea-Czech Republic':             { date:'2026-06-11', display:'Jun 11 · 22:00' },
+  'Czech Republic-South Korea':             { date:'2026-06-11', display:'Jun 11 · 22:00' },
+  'Czech Republic-South Africa':            { date:'2026-06-18', display:'Jun 18 · 12:00' },
+  'South Africa-Czech Republic':            { date:'2026-06-18', display:'Jun 18 · 12:00' },
+  'Mexico-South Korea':                     { date:'2026-06-18', display:'Jun 18 · 21:00' },
+  'South Korea-Mexico':                     { date:'2026-06-18', display:'Jun 18 · 21:00' },
+  // GROUP B — Jun 12-13
+  'Canada-Bosnia and Herzegovina':          { date:'2026-06-12', display:'Jun 12 · 15:00' },
+  'Bosnia and Herzegovina-Canada':          { date:'2026-06-12', display:'Jun 12 · 15:00' },
+  'Qatar-Switzerland':                      { date:'2026-06-13', display:'Jun 13 · 15:00' },
+  'Switzerland-Qatar':                      { date:'2026-06-13', display:'Jun 13 · 15:00' },
+  'Switzerland-Bosnia and Herzegovina':     { date:'2026-06-18', display:'Jun 18 · 15:00' },
+  'Bosnia and Herzegovina-Switzerland':     { date:'2026-06-18', display:'Jun 18 · 15:00' },
+  'Canada-Qatar':                           { date:'2026-06-18', display:'Jun 18 · 18:00' },
+  'Qatar-Canada':                           { date:'2026-06-18', display:'Jun 18 · 18:00' },
+  // GROUP C — Jun 12-13
+  'United States-Paraguay':                 { date:'2026-06-12', display:'Jun 12 · 21:00' },
+  'Paraguay-United States':                 { date:'2026-06-12', display:'Jun 12 · 21:00' },
+  'Australia-Turkey':                       { date:'2026-06-14', display:'Jun 14 · 00:00' },
+  'Turkey-Australia':                       { date:'2026-06-14', display:'Jun 14 · 00:00' },
+  'United States-Australia':                { date:'2026-06-19', display:'Jun 19 · 15:00' },
+  'Australia-United States':                { date:'2026-06-19', display:'Jun 19 · 15:00' },
+  'Turkey-Paraguay':                        { date:'2026-06-20', display:'Jun 20 · 00:00' },
+  'Paraguay-Turkey':                        { date:'2026-06-20', display:'Jun 20 · 00:00' },
+  // GROUP D — Jun 13
+  'Brazil-Morocco':                         { date:'2026-06-13', display:'Jun 13 · 18:00' },
+  'Morocco-Brazil':                         { date:'2026-06-13', display:'Jun 13 · 18:00' },
+  'Haiti-Scotland':                         { date:'2026-06-13', display:'Jun 13 · 21:00' },
+  'Scotland-Haiti':                         { date:'2026-06-13', display:'Jun 13 · 21:00' },
+  'Scotland-Morocco':                       { date:'2026-06-19', display:'Jun 19 · 18:00' },
+  'Morocco-Scotland':                       { date:'2026-06-19', display:'Jun 19 · 18:00' },
+  'Brazil-Haiti':                           { date:'2026-06-19', display:'Jun 19 · 21:00' },
+  'Haiti-Brazil':                           { date:'2026-06-19', display:'Jun 19 · 21:00' },
+  // GROUP E — Jun 14
+  'Germany-Curaçao':                        { date:'2026-06-14', display:'Jun 14 · 13:00' },
+  'Curaçao-Germany':                        { date:'2026-06-14', display:'Jun 14 · 13:00' },
+  'Ivory Coast-Ecuador':                    { date:'2026-06-14', display:'Jun 14 · 19:00' },
+  'Ecuador-Ivory Coast':                    { date:'2026-06-14', display:'Jun 14 · 19:00' },
+  'Germany-Ivory Coast':                    { date:'2026-06-20', display:'Jun 20 · 16:00' },
+  'Ivory Coast-Germany':                    { date:'2026-06-20', display:'Jun 20 · 16:00' },
+  'Ecuador-Curaçao':                        { date:'2026-06-20', display:'Jun 20 · 20:00' },
+  'Curaçao-Ecuador':                        { date:'2026-06-20', display:'Jun 20 · 20:00' },
+  // GROUP F — Jun 14
+  'Netherlands-Japan':                      { date:'2026-06-14', display:'Jun 14 · 16:00' },
+  'Japan-Netherlands':                      { date:'2026-06-14', display:'Jun 14 · 16:00' },
+  'Sweden-Tunisia':                         { date:'2026-06-14', display:'Jun 14 · 22:00' },
+  'Tunisia-Sweden':                         { date:'2026-06-14', display:'Jun 14 · 22:00' },
+  'Netherlands-Sweden':                     { date:'2026-06-20', display:'Jun 20 · 13:00' },
+  'Sweden-Netherlands':                     { date:'2026-06-20', display:'Jun 20 · 13:00' },
+  'Tunisia-Japan':                          { date:'2026-06-21', display:'Jun 21 · 00:00' },
+  'Japan-Tunisia':                          { date:'2026-06-21', display:'Jun 21 · 00:00' },
+  // GROUP G — Jun 15
+  'Spain-Cape Verde':                       { date:'2026-06-15', display:'Jun 15 · 12:00' },
+  'Cape Verde-Spain':                       { date:'2026-06-15', display:'Jun 15 · 12:00' },
+  'Belgium-Egypt':                          { date:'2026-06-15', display:'Jun 15 · 15:00' },
+  'Egypt-Belgium':                          { date:'2026-06-15', display:'Jun 15 · 15:00' },
+  'Saudi Arabia-Uruguay':                   { date:'2026-06-15', display:'Jun 15 · 18:00' },
+  'Uruguay-Saudi Arabia':                   { date:'2026-06-15', display:'Jun 15 · 18:00' },
+  'Iran-New Zealand':                       { date:'2026-06-15', display:'Jun 15 · 21:00' },
+  'New Zealand-Iran':                       { date:'2026-06-15', display:'Jun 15 · 21:00' },
+  'Spain-Saudi Arabia':                     { date:'2026-06-21', display:'Jun 21 · 12:00' },
+  'Saudi Arabia-Spain':                     { date:'2026-06-21', display:'Jun 21 · 12:00' },
+  'Belgium-Iran':                           { date:'2026-06-21', display:'Jun 21 · 15:00' },
+  'Iran-Belgium':                           { date:'2026-06-21', display:'Jun 21 · 15:00' },
+  'Uruguay-Cape Verde':                     { date:'2026-06-21', display:'Jun 21 · 18:00' },
+  'Cape Verde-Uruguay':                     { date:'2026-06-21', display:'Jun 21 · 18:00' },
+  'New Zealand-Egypt':                      { date:'2026-06-21', display:'Jun 21 · 21:00' },
+  'Egypt-New Zealand':                      { date:'2026-06-21', display:'Jun 21 · 21:00' },
+  // GROUP I — Jun 16
+  'France-Senegal':                         { date:'2026-06-16', display:'Jun 16 · 15:00' },
+  'Senegal-France':                         { date:'2026-06-16', display:'Jun 16 · 15:00' },
+  'Iraq-Norway':                            { date:'2026-06-16', display:'Jun 16 · 18:00' },
+  'Norway-Iraq':                            { date:'2026-06-16', display:'Jun 16 · 18:00' },
+  'Argentina-Algeria':                      { date:'2026-06-16', display:'Jun 16 · 21:00' },
+  'Algeria-Argentina':                      { date:'2026-06-16', display:'Jun 16 · 21:00' },
+  // GROUP J — Jun 17
+  'Austria-Jordan':                         { date:'2026-06-17', display:'Jun 17 · 00:00' },
+  'Jordan-Austria':                         { date:'2026-06-17', display:'Jun 17 · 00:00' },
+  'Portugal-Democratic Republic of the Congo': { date:'2026-06-17', display:'Jun 17 · 13:00' },
+  'Democratic Republic of the Congo-Portugal': { date:'2026-06-17', display:'Jun 17 · 13:00' },
+  'England-Croatia':                        { date:'2026-06-17', display:'Jun 17 · 16:00' },
+  'Croatia-England':                        { date:'2026-06-17', display:'Jun 17 · 16:00' },
+  'Uzbekistan-Colombia':                    { date:'2026-06-17', display:'Jun 17 · 22:00' },
+  'Colombia-Uzbekistan':                    { date:'2026-06-17', display:'Jun 17 · 22:00' },
+  'Ghana-Panama':                           { date:'2026-06-17', display:'Jun 17 · 19:00' },
+  'Panama-Ghana':                           { date:'2026-06-17', display:'Jun 17 · 19:00' },
 };
 
-// Display corrections — fix API wrong dates/times for card and ticker display
-const MATCH_DISPLAY_CORRECTIONS = {
-  'Australia-Turkey':   'Jun 14 · 00:00',
-  'Turkey-Australia':   'Jun 14 · 00:00',
-  'Austria-Jordan':     'Jun 17 · 00:00',
-  'Jordan-Austria':     'Jun 17 · 00:00',
-  'Turkey-Paraguay':    'Jun 20 · 00:00',
-  'Paraguay-Turkey':    'Jun 20 · 00:00',
-  'Tunisia-Japan':      'Jun 21 · 00:00',
-  'Japan-Tunisia':      'Jun 21 · 00:00',
-};
+// Build lookup maps
+const MATCH_DATE_CORRECTIONS = Object.fromEntries(
+  Object.entries(OFFICIAL_SCHEDULE).map(([k,v]) => [k, v.date])
+);
+const MATCH_DISPLAY_CORRECTIONS = Object.fromEntries(
+  Object.entries(OFFICIAL_SCHEDULE).map(([k,v]) => [k, v.display])
+);
 
 function matchEffectiveDateStr(m) {
   if (!m.date) return '';
