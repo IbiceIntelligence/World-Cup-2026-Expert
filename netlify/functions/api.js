@@ -351,10 +351,22 @@ async function getWorldCupNews(lang) {
   ];
 
   const RSS_ES = [
-    { url: 'https://www.espndeportes.espn.com/espndeportes/rss/soccer/news', source: 'ESPN Deportes' },
-    { url: 'https://feeds.bbci.co.uk/mundo/deportes/futbol/rss.xml',          source: 'BBC Mundo'     },
-    { url: 'https://www.goal.com/feeds/es/news',                             source: 'Goal.com ES'   },
-    { url: 'https://www.tycsports.com/rss/',                                 source: 'TyC Sports'    },
+    // ESPN Deportes — fútbol en español, cobertura del Mundial
+    { url: 'https://espndeportes.espn.com/espndeportes/rss/futbol/news',                   source: 'ESPN Deportes' },
+    // AS.com — diario deportivo español, sección fútbol internacional
+    { url: 'https://feeds.as.com/mrss-s/pages/as/site/as.com/section/futbol/subsection/internacional/', source: 'AS.com' },
+    // Marca — fútbol internacional
+    { url: 'https://e00-marca.uecdn.es/rss/futbol/futbol-internacional.xml',               source: 'Marca'         },
+    // Récord México — cobertura del Mundial desde México
+    { url: 'https://www.record.com.mx/rss/futbol-internacional.xml',                       source: 'Récord'        },
+    // Olé Argentina — fútbol internacional desde Argentina
+    { url: 'https://www.ole.com.ar/rss/futbol-internacional.xml',                          source: 'Olé'           },
+    // FutbolRed Colombia — fútbol internacional
+    { url: 'https://www.futbolred.com/rss/futbol-internacional.xml',                       source: 'FutbolRed'     },
+    // TyC Sports Argentina — RSS general deportes
+    { url: 'https://www.tycsports.com/rss/',                                               source: 'TyC Sports'    },
+    // El Tiempo Colombia — deportes
+    { url: 'https://www.eltiempo.com/rss/deportes_futbol-internacional.xml',               source: 'El Tiempo'     },
   ];
 
   const sources = isES ? RSS_ES : RSS_EN;
@@ -365,20 +377,7 @@ async function getWorldCupNews(lang) {
 
   results.forEach(r => {
     if (r.status === 'fulfilled' && r.value.length) {
-      // Strict language filter on article titles
-      r.value.forEach(a => {
-        if (isES) {
-          // Skip if title looks like English (has common English-only words)
-          const looksEnglish = /\b(the|and|for|with|after|that|this|from|have|will|world cup|match|game|squad)\b/i.test(a.title) &&
-            !/\b(el|la|los|las|del|que|con|por|para|una|este|esta|copa|partido|jugador|equipo)\b/i.test(a.title);
-          if (!looksEnglish) articles.push(a);
-        } else {
-          // Skip if title looks like Spanish
-          const looksSpanish = /\b(el|la|los|las|del|que|con|por|para|una|este|esta|copa|partido|jugador|equipo|gana|derrota)\b/i.test(a.title) &&
-            !/\b(the|and|for|with|after|that|this|from|have|will)\b/i.test(a.title);
-          if (!looksSpanish) articles.push(a);
-        }
-      });
+      articles.push(...r.value);
     }
   });
 
@@ -395,14 +394,9 @@ async function getWorldCupNews(lang) {
   const wcFirst = unique.filter(a =>
     /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
   );
-  const footballOther = unique.filter(a => {
-    const t = a.title.toLowerCase();
-    const isWC = /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title);
-    if (isWC) return false;
-    // For ES: only include if it's about football/soccer
-    if (isES) return /futbol|fútbol|soccer|gol|partido|seleccion|selección|equipo|jugador|liga|champions|balompié/.test(t);
-    return true;
-  });
+  const footballOther = unique.filter(a =>
+    !/world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
+  );
 
   const final = [...wcFirst, ...footballOther].slice(0, 8);
 
