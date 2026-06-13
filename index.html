@@ -1285,6 +1285,18 @@ const MATCH_DATE_CORRECTIONS = {
   'Japan-Tunisia':      '2026-06-21',
 };
 
+// Display corrections — fix API wrong dates/times for card and ticker display
+const MATCH_DISPLAY_CORRECTIONS = {
+  'Australia-Turkey':   'Jun 14 · 00:00',
+  'Turkey-Australia':   'Jun 14 · 00:00',
+  'Austria-Jordan':     'Jun 17 · 00:00',
+  'Jordan-Austria':     'Jun 17 · 00:00',
+  'Turkey-Paraguay':    'Jun 20 · 00:00',
+  'Paraguay-Turkey':    'Jun 20 · 00:00',
+  'Tunisia-Japan':      'Jun 21 · 00:00',
+  'Japan-Tunisia':      'Jun 21 · 00:00',
+};
+
 function matchEffectiveDateStr(m) {
   if (!m.date) return '';
   // Check correction map first
@@ -1323,7 +1335,10 @@ function statusBadge(match) {
     return `<span class="time">● ${match.minute || 'LIVE'}</span>`;
   if (match.status === 'finished')
     return '';
-  return `<span class="venue">${fmtDate(match.date)}</span>`;
+  // Check display correction for known wrong API dates
+  const key = match.home && match.away ? match.home.name + '-' + match.away.name : '';
+  const corrected = MATCH_DISPLAY_CORRECTIONS[key];
+  return `<span class="venue">${corrected || fmtDate(match.date)}</span>`;
 }
 
 // Score display
@@ -1380,7 +1395,10 @@ function buildTicker(matches) {
 
     // Format date for upcoming: "Jun 13 · 18:00"
     let timeLabel = '';
-    if (m.date) {
+    const tickerKey = m.home && m.away ? m.home.name + '-' + m.away.name : '';
+    if (MATCH_DISPLAY_CORRECTIONS[tickerKey]) {
+      timeLabel = MATCH_DISPLAY_CORRECTIONS[tickerKey];
+    } else if (m.date) {
       const parts = m.date.split(' '); // ["06/13/2026", "18:00"]
       const dateParts = parts[0].split('/'); // [MM, DD, YYYY]
       const mon = months[parseInt(dateParts[0])] || '';
