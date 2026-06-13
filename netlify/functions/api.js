@@ -318,17 +318,33 @@ async function parseRSS(url, sourceLabel, tagDefault) {
         else if (diff < 1440) timeAgo = Math.floor(diff/60) + ' hours ago';
         else timeAgo = Math.floor(diff/1440) + ' days ago';
       }
-      // Classify tag — bilingual ES+EN keywords, single-line regexes
+      // Classify tag — bilingual ES+EN keywords
       let tag = 'PREVIEW';
       const t = (fullText || title).toLowerCase();
-      if (/injur|ruled out|out for|misses|sidelined|won.t feature|fitness concern|lesion|baja |sin jugar|descartado|se pierde|fuera del|no podra|acl|ligamento|rotura|desgarro|esguince|fractura|denied entry|neg.* la visa|visa negada|no pudo viajar|le neg|sin visa|visa denegada/.test(t))
+
+      // INJURY — physical injuries only
+      if (/injur|ruled out|out for|misses|sidelined|won.t feature|fitness concern|lesion|sin jugar por lesion|descartado por lesion|se pierde por|acl|ligamento|rotura|desgarro|esguince|fractura|operado|cirugia|muscular|tobillo|rodilla|hamstring/.test(t))
         tag = 'INJURY';
+
+      // BAJA — absences: visa denied, suspension, ban, expulsion (not injury)
+      else if (/denied entry|neg.* la visa|visa negada|no pudo viajar|le neg.*visa|sin visa|visa denegada|suspendido|sancionado|expulsado|banned|suspension|sanction|expelled|red card suspension|cumple sancion|baja por sancion|descartado por sancion|veto|inhabilitado/.test(t))
+        tag = 'BAJA';
+
+      // RESULT — match results, scores
       else if (/beats |beat |defeat|wins |won |victory|equalis|equaliz|thrash|clinch|gana |gano |vencio|derrota|empat|logra|logro|consigue|primer punto|primer gol|debut con|estrena con|[0-9]-[0-9]|[0-9] a [0-9]|saca la casta|avanza|clasifica/.test(t))
         tag = 'RESULT';
+
+      // ODDS — betting markets
       else if (/odds|betting|favorite|favourite|wager| bet |moneyline|cuotas|apuesta|favorito|cotiza|momio|casas de apuesta|apuestas deportivas/.test(t))
         tag = 'ODDS';
+
+      // LINEUP — team selections
       else if (/lineup|line-up|starting xi|starting eleven|squad named|confirmed team|alineaci|convocatoria|once inicial|titulares|jugara de inicio|lista de convocados|once confirmado/.test(t))
         tag = 'LINEUP';
+
+      // ADMIN — FIFA decisions, rules, controversies, VAR, format changes
+      else if (/fifa decision|var |regla|nueva regla|formato|sede|estadio|escandalo|polemica|polemic|controversy|banned stadium|relocat|cambio de sede|sancion fifa|cas |tribunal|arbitraje administrativo|hidratacion|pausa|expansion|48 equipos/.test(t))
+        tag = 'ADMIN';
       items.push({ title, tag, source: sourceLabel, timeAgo, url: url || null });
     }
     return items;
