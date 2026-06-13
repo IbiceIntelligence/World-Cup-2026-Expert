@@ -1157,15 +1157,9 @@ function filterMatchesByTab(tab) {
   if (!allMatchesCache.length) return;
   const label = (tab.getAttribute('data-es') || tab.textContent.trim()).toLowerCase();
 
-  // Parse match date "MM/DD/YYYY HH:MM" → {dateStr:"YYYY-MM-DD", hour:number}
+  // Uses matchEffectiveDateStr — defined globally above
   function parseMatch(m) {
-    if (!m.date) return { dateStr: '', hour: 0 };
-    const [datePart, timePart] = m.date.split(' ');
-    const parts = datePart.split('/');
-    if (parts.length < 3) return { dateStr: '', hour: 0 };
-    const dateStr = parts[2] + '-' + String(parts[0]).padStart(2,'0') + '-' + String(parts[1]).padStart(2,'0');
-    const hour = timePart ? parseInt(timePart.split(':')[0]) : 12;
-    return { dateStr, hour };
+    return { dateStr: matchEffectiveDateStr(m) };
   }
 
   // Use ET offset: Miami is UTC-4 in summer (EDT)
@@ -1203,15 +1197,15 @@ function filterMatchesByTab(tab) {
   }
 
   if (label === 'hoy' || label === 'today') {
-    filtered = allMatchesCache.filter(m => parseMatch(m).dateStr === todayISO);
+    filtered = allMatchesCache.filter(m => matchEffectiveDateStr(m) === todayISO);
     headerLabel = dateLabel(todayISO);
   } else if (label === 'mañana' || label === 'tomorrow') {
-    filtered = allMatchesCache.filter(m => parseMatch(m).dateStr === tomorrowISO);
+    filtered = allMatchesCache.filter(m => matchEffectiveDateStr(m) === tomorrowISO);
     headerLabel = dateLabel(tomorrowISO);
   } else {
     // Semana: Mon–Sun of current ET week
     filtered = allMatchesCache.filter(m => {
-      const d = parseMatch(m).dateStr;
+      const d = matchEffectiveDateStr(m);
       return d >= weekStartISO && d <= weekEndISO;
     });
     const enLabel = 'WEEK ' + dateLabel(weekStartISO) + ' → ' + dateLabel(weekEndISO);
@@ -1263,6 +1257,24 @@ const FLAGS = {
   'Honduras':'🇭🇳','Costa Rica':'🇨🇷','Jamaica':'🇯🇲','Cuba':'🇨🇺',
 };
 const flag = name => FLAGS[name] || '🏳';
+
+// Match effective date
+// 00:00 kickoffs mean midnight START of the NEXT calendar day (e.g. Jun 13 00:00 = Jun 14)
+function matchEffectiveDateStr(m) {
+  if (!m.date) return '';
+  const [datePart, timePart] = m.date.split(' ');
+  const parts = datePart ? datePart.split('/') : [];
+  if (parts.length < 3) return '';
+  const hour = timePart ? parseInt(timePart.split(':')[0]) : 12;
+  const min  = timePart ? parseInt((timePart.split(':')[1])||0) : 0;
+  const dt = new Date(parseInt(parts[2]), parseInt(parts[0])-1, parseInt(parts[1]), hour, min, 0);
+  // 00:00 exactly = midnight = start of next day
+  const effective = (hour === 0 && min === 0)
+    ? new Date(dt.getTime() + 86400000)
+    : dt;
+  const pad = n => String(n).padStart(2,'0');
+  return effective.getFullYear() + '-' + pad(effective.getMonth()+1) + '-' + pad(effective.getDate());
+}
 
 // Format date "06/11/2026 13:00" → "Jun 11 · 13:00"
 function fmtDate(str) {
@@ -1428,8 +1440,11 @@ function renderFixtures(matches) {
       </div>
     </div>`;
 
-  // Today's matches only for dashboard and default partidos view
-  const todayAll = matches.filter(m => m.date && m.date.startsWith(todayLocal));
+  // Today's matches — midnight kickoffs (00-05h) count as previous day
+  const etNow = new Date(Date.now() + (-4)*3600000);
+  const etPad = n => String(n).padStart(2,'0');
+  const etTodayISO = etNow.getUTCFullYear()+'-'+etPad(etNow.getUTCMonth()+1)+'-'+etPad(etNow.getUTCDate());
+  const todayAll = matches.filter(m => matchEffectiveDateStr(m) === etTodayISO);
   const todayLive     = todayAll.filter(m => m.status === 'live');
   const todayFinished = todayAll.filter(m => m.status === 'finished');
   const todayUpcoming = todayAll.filter(m => m.status === 'scheduled');
