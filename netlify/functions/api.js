@@ -92,7 +92,7 @@ async function getFixtures() {
     // ── JUN 14 ──
     { id:'m08', home:{name:'Australia'},    away:{name:'Turkey'},                date:'06/14/2026 00:00', group:'D', status:'finished', homeScore:2, awayScore:0 },
     { id:'m09', home:{name:'Germany'},      away:{name:'Curaçao'},               date:'06/14/2026 13:00', group:'E', status:'finished', homeScore:7, awayScore:1 },
-    { id:'m10', home:{name:'Netherlands'}, away:{name:'Japan'},                  date:'06/14/2026 16:00', group:'F', status:'live',     homeScore:2, awayScore:2 },
+    { id:'m10', home:{name:'Netherlands'}, away:{name:'Japan'},                  date:'06/14/2026 16:00', group:'F', status:'finished', homeScore:2, awayScore:2 },
     { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'scheduled', homeScore:null, awayScore:null },
     { id:'m12', home:{name:'Sweden'},       away:{name:'Tunisia'},               date:'06/14/2026 22:00', group:'F', status:'scheduled', homeScore:null, awayScore:null },
     // ── JUN 15 ──
@@ -166,10 +166,35 @@ async function getFixtures() {
         });
       }
     }
-  } catch(e) {
-    // Apify failed or timed out — use official schedule as-is
-  }
+  } catch(e1) {
+    // trovevault failed — try kindly_bolt as fallback
+    try {
+      if (APIFY_API_TOKEN) {
+        const items2 = await Promise.race([
+          runApifyActor('kindly_bolt/wc2026-actors', { include_results: true, language: 'en' }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+        ]);
+        if (Array.isArray(items2) && items2.length > 0) {
+          items2.forEach(live => {
+            const homeName = live.team_home || live.homeTeam || '';
+            const awayName = live.team_away || live.awayTeam || '';
+            const match = OFFICIAL_MATCHES.find(m => m.home.name === homeName && m.away.name === awayName);
+            if (match && (live.status === 'finished' || live.status === 'live')) {
+              const hs = live.score_home ?? live.homeScore ?? null;
+              const as = live.score_away ?? live.awayScore ?? null;
+              if (hs !== null) match.homeScore = parseInt(hs);
+              if (as !== null) match.awayScore = parseInt(as);
+              match.status = live.status;
+              if (live.status === 'live') match.minute = live.minute || null;
+            }
+          });
+        }
+      }
+    } catch(e2) {
+      // Both Apify actors failed — use official schedule
+    }
 
+  }
   return { ok: true, matches: OFFICIAL_MATCHES };
 }
 
