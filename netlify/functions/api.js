@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1200,
+      max_tokens: 2000,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -22,8 +22,20 @@ async function callClaude(system, user) {
   if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
   const data = await res.json();
   const text = data.content?.[0]?.text || '{}';
-  const clean = text.replace(/```json\n?|```/g, '').trim();
-  return JSON.parse(clean);
+  // Strip markdown fences and find JSON object
+  let clean = text.replace(/```json\n?|```/g, '').trim();
+  // If Claude added text before/after JSON, extract just the JSON object
+  const jsonStart = clean.indexOf('{');
+  const jsonEnd = clean.lastIndexOf('}');
+  if (jsonStart >= 0 && jsonEnd >= 0) {
+    clean = clean.slice(jsonStart, jsonEnd + 1);
+  }
+  try {
+    return JSON.parse(clean);
+  } catch(e) {
+    // Return partial result rather than throwing
+    return { error: 'parse_error', raw: clean.slice(0, 200) };
+  }
 }
 
 // Generic JSON fetch with timeout
