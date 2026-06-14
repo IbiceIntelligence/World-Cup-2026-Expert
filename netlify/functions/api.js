@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 1500,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -342,24 +342,9 @@ async function getMatchAnalysis(home, away, lang = 'es') {
     .map(([t,s]) => `${t}: ${s.pts}pts ${s.p}PJ ${s.w}W ${s.d}D ${s.l}L ${s.gf}-${s.ga}`)
     .join(' | ');
 
-  // 4. Try to get live odds from Apify
-  let oddsContext = 'Odds not available — use implied probabilities from historical data';
-  if (APIFY_API_TOKEN) {
-    try {
-      const oddsData = await Promise.race([
-        runApifyActor('scrapemint/sports-odds-scraper', {
-          sport: 'soccer', league: 'FIFA World Cup 2026',
-          query: `${home} vs ${away}`, maxItems: 5,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
-      ]);
-      if (Array.isArray(oddsData) && oddsData.length > 0) {
-        oddsContext = oddsData.slice(0,3).map(o =>
-          `${o.bookmaker||o.source}: ${home} ${o.home||o.homeOdds||'?'} | Draw ${o.draw||o.drawOdds||'?'} | ${away} ${o.away||o.awayOdds||'?'}`
-        ).join(' || ');
-      }
-    } catch(e) { /* odds timeout — use fallback */ }
-  }
+  // 4. Odds context — Claude uses its own knowledge of WC2026 odds
+  // (Apify odds actors run async separately to avoid timeout)
+  const oddsContext = 'Use your knowledge of current WC2026 market odds for this match. Apply implied probability calculation.';
 
   // 5. Match context string
   const matchStatus = match ? `${match.status}${match.status==='live' ? ' ('+match.minute+"')" : ''}` : 'scheduled';
