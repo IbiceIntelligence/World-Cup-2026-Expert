@@ -2246,6 +2246,9 @@ function renderAnalysis(body, home, away, data) {
     const evClass = evNum >= 0 ? 'ev-pos' : 'ev-neg';
     const evLabel = evNum >= 0 ? `+${evNum.toFixed(1)}% EV` : `${evNum.toFixed(1)}% EV`;
     const conf = Math.min(100, Math.max(0, parseInt(p.confidence) || 65));
+    const oddsDisplay = p.odds_american
+      ? `${p.odds} <span style="font-size:10px;color:#5a5650">(${p.odds_american})</span>`
+      : p.odds || '';
     return `
       <div class="pick-row">
         <div>
@@ -2256,7 +2259,7 @@ function renderAnalysis(body, home, away, data) {
             <span class="conf-label">${conf}% ${currentLang==='en'?'conf.':'conf.'}</span>
           </div>
         </div>
-        <span class="pick-odds">${p.odds || ''}</span>
+        <span class="pick-odds">${oddsDisplay}</span>
         <span class="pick-ev ${evClass}">${evLabel}</span>
       </div>`;
   }).join('');
@@ -2283,6 +2286,19 @@ function renderAnalysis(body, home, away, data) {
       <div class="drawer-section-title">${currentLang==='en'?'KEY FACTORS':'FACTORES CLAVE'}</div>
       ${factors || `<div class="drawer-summary">—</div>`}
     </div>
+
+    ${data.xgAnalysis || data.lineMovement ? `
+    <div class="drawer-section">
+      ${data.xgAnalysis ? `
+        <div class="drawer-section-title" style="margin-bottom:6px">${currentLang==='en'?'⚽ xG MODEL':'⚽ MODELO xG'}</div>
+        <div class="drawer-summary" style="margin-bottom:${data.lineMovement?'12px':'0'}">${data.xgAnalysis}</div>
+      ` : ''}
+      ${data.lineMovement ? `
+        <div class="drawer-section-title" style="margin-bottom:6px">${currentLang==='en'?'🔥 LINE MOVEMENT':'🔥 MOVIMIENTO DE LÍNEA'}</div>
+        <div class="drawer-summary">${data.lineMovement}</div>
+      ` : ''}
+    </div>
+    ` : ''}
 
     <div class="drawer-section">
       <div class="drawer-section-title">${currentLang==='en'?'PREDICTION':'PREDICCIÓN'}</div>
