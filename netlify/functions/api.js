@@ -72,82 +72,160 @@ const VENUE_COORDS = {
 };
 
 // ── ACTION: FIXTURES ───────────────────────────────────────────────────────
-// Source: worldcup26.ir — free, no auth required
+// Source: Apify actors — trovevault + kindly_bolt
+// ── APIFY ACTOR RUNNER ────────────────────────────────────────────────────
+async function runApifyActor(actorId, inputData, timeoutSecs = 60) {
+  if (!APIFY_API_TOKEN) throw new Error('APIFY_API_TOKEN not configured');
+  // Start actor run
+  const runRes = await fetchJSON(
+    `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/runs?token=${APIFY_API_TOKEN}`,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inputData) }
+  );
+  const runId = runRes?.data?.id;
+  if (!runId) throw new Error(`Apify actor start failed: ${JSON.stringify(runRes)}`);
+
+  // Poll for completion
+  const deadline = Date.now() + timeoutSecs * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 3000));
+    const statusRes = await fetchJSON(
+      `https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_API_TOKEN}`
+    );
+    const status = statusRes?.data?.status;
+    if (status === 'SUCCEEDED') {
+      const datasetId = statusRes.data.defaultDatasetId;
+      const items = await fetchJSON(
+        `https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_API_TOKEN}&limit=200`
+      );
+      return Array.isArray(items) ? items : items.items || [];
+    }
+    if (['FAILED','ABORTED','TIMED-OUT'].includes(status)) throw new Error(`Actor ${status}`);
+  }
+  throw new Error('Actor timed out');
+}
+
+// ── FIXTURES — trovevault/world-cup-results-tables (primary) ──────────────
+// Fallback: kindly_bolt/wc2026-actors
 async function getFixtures() {
   try {
-    const data = await fetchJSON('https://worldcup26.ir/get/games');
-    // Normalize to our format
-    const matches = (Array.isArray(data) ? data : data.games || data.matches || [])
-      .slice(0, 48)
-      .map(m => ({
-        id:        m._id || m.id,
-        home:      { name: m.home_team_name_en || m.home_team_name_fa || '' },
-        away:      { name: m.away_team_name_en || m.away_team_name_fa || '' },
-        homeScore: m.home_score ?? null,
-        awayScore: m.away_score ?? null,
-        status:    m.finished === 'TRUE' ? 'finished'
-                 : (m.time_elapsed && m.time_elapsed !== 'notstarted') ? 'live'
-                 : 'scheduled',
-        date:      m.local_date || m.date || null,
-        venue:     m.stadium_id ? 'Stadium ' + m.stadium_id : null,
-        group:     m.group || null,
-        matchday:  m.matchday || null,
-        minute:    (m.time_elapsed && m.time_elapsed !== 'notstarted') ? m.time_elapsed : null,
-      }));
-    return { ok: true, matches };
-  } catch (e) {
-    return { ok: false, error: e.message, matches: [] };
+    // Primary: trovevault — live results + scheduled matches
+    const items = await runApifyActor('trovevault/world-cup-results-tables', {
+      year: '2026',
+      stage: 'group',
+      includeMatches: true,
+      includeGroupTables: false,
+      maxMatches: 104,
+    }, 55);
+
+    const matches = items
+      .filter(m => m.homeTeam || m.home_team || m.team_home)
+      .map(m => {
+        const homeName = m.homeTeam || m.home_team || m.team_home || '';
+        const awayName = m.awayTeam || m.away_team || m.team_away || '';
+        const hs = m.homeScore ?? m.home_score ?? m.score_home ?? null;
+        const as = m.awayScore ?? m.away_score ?? m.score_away ?? null;
+        const isFinished = m.status === 'finished' || m.finished === true || m.fullTime === true;
+        const isLive = m.status === 'live' || m.live === true || m.inProgress === true;
+        return {
+          id:        m.matchId || m.id || m.match_id || (homeName + '-' + awayName),
+          home:      { name: homeName },
+          away:      { name: awayName },
+          homeScore: hs !== null ? parseInt(hs) : null,
+          awayScore: as !== null ? parseInt(as) : null,
+          status:    isFinished ? 'finished' : isLive ? 'live' : 'scheduled',
+          date:      m.date || m.match_date || m.kickoff || null,
+          venue:     m.venue || m.stadium || null,
+          group:     m.group || m.groupName || null,
+          minute:    m.minute || m.elapsed || null,
+        };
+      });
+
+    if (matches.length > 0) return { ok: true, matches };
+    throw new Error('No matches from trovevault');
+  } catch(e1) {
+    // Fallback: kindly_bolt/wc2026-actors
+    try {
+      const items = await runApifyActor('kindly_bolt/wc2026-actors', {
+        include_results: true,
+        language: 'en',
+      }, 55);
+
+      const matches = items
+        .filter(m => m.team_home || m.homeTeam)
+        .map(m => {
+          const homeName = m.team_home || m.homeTeam || '';
+          const awayName = m.team_away || m.awayTeam || '';
+          const hs = m.score_home ?? m.homeScore ?? null;
+          const as = m.score_away ?? m.awayScore ?? null;
+          const isFinished = m.status === 'finished' || m.played === true;
+          const isLive = m.status === 'live';
+          return {
+            id:        m.match_id || m.matchId || (homeName + '-' + awayName),
+            home:      { name: homeName },
+            away:      { name: awayName },
+            homeScore: hs !== null ? parseInt(hs) : null,
+            awayScore: as !== null ? parseInt(as) : null,
+            status:    isFinished ? 'finished' : isLive ? 'live' : 'scheduled',
+            date:      m.match_date || m.date || null,
+            venue:     m.venue || null,
+            group:     m.group || null,
+            minute:    m.minute || null,
+          };
+        });
+
+      if (matches.length > 0) return { ok: true, matches };
+      throw new Error('No matches from kindly_bolt');
+    } catch(e2) {
+      return { ok: false, error: e2.message, matches: [] };
+    }
   }
 }
 
 // ── ACTION: GROUPS ─────────────────────────────────────────────────────────
-// Source: worldcup26.ir — crosses fixtures to resolve team names from IDs
 async function getGroups() {
   try {
-    // Fetch both in parallel
-    const [groupData, fixtureData] = await Promise.all([
-      fetchJSON('https://worldcup26.ir/get/groups'),
-      fetchJSON('https://worldcup26.ir/get/games'),
-    ]);
+    const items = await runApifyActor('trovevault/world-cup-results-tables', {
+      year: '2026',
+      stage: 'group',
+      includeMatches: false,
+      includeGroupTables: true,
+      maxMatches: 0,
+    }, 55);
 
-    // Build team_id → name map from fixtures
-    const teamMap = {};
-    const games = Array.isArray(fixtureData) ? fixtureData : fixtureData.games || [];
-    games.forEach(g => {
-      if (g.home_team_id && g.home_team_name_en) teamMap[String(g.home_team_id)] = g.home_team_name_en;
-      if (g.away_team_id && g.away_team_name_en) teamMap[String(g.away_team_id)] = g.away_team_name_en;
+    const groupMap = {};
+    items.forEach(item => {
+      const grp = item.group || item.groupName || item.group_name;
+      if (!grp) return;
+      const g = grp.replace(/^Group\s*/i, '').trim().toUpperCase();
+      if (!groupMap[g]) groupMap[g] = [];
+      groupMap[g].push({
+        name:   item.team || item.teamName || item.name || '',
+        played: parseInt(item.played || item.p || item.matchesPlayed || 0),
+        won:    parseInt(item.won    || item.w || 0),
+        drawn:  parseInt(item.drawn  || item.d || 0),
+        lost:   parseInt(item.lost   || item.l || 0),
+        gf:     parseInt(item.goalsFor     || item.gf || 0),
+        ga:     parseInt(item.goalsAgainst || item.ga || 0),
+        gd:     parseInt(item.goalDiff     || item.gd || 0),
+        points: parseInt(item.points || item.pts || 0),
+      });
     });
 
-    const raw = Array.isArray(groupData) ? groupData : groupData.groups || [];
-    const groups = raw.map(g => ({
-      name:  g.name || g.group || g._id,
-      teams: (g.teams || []).map(t => {
-        const tid = String(t.team_id || t.id || '');
-        const teamName = teamMap[tid] || tid;
-        return {
-          name:   teamName,
-          flag:   t.flag || '',
-          played: parseInt(t.mp  || t.played || 0),
-          won:    parseInt(t.w   || t.won    || 0),
-          drawn:  parseInt(t.d   || t.drawn  || 0),
-          lost:   parseInt(t.l   || t.lost   || 0),
-          gf:     parseInt(t.gf  || 0),
-          ga:     parseInt(t.ga  || 0),
-          gd:     parseInt(t.gd  || 0),
-          points: parseInt(t.pts || t.points || 0),
-        };
-      }).sort((a, b) => b.points - a.points || b.gd - a.gd),
-    }));
-    // Sort groups alphabetically A→L
-    groups.sort((a, b) => a.name.localeCompare(b.name));
-    return { ok: true, groups };
-  } catch (e) {
+    const groups = Object.entries(groupMap)
+      .map(([name, teams]) => ({
+        name,
+        teams: teams.sort((a,b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf),
+      }))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+    if (groups.length > 0) return { ok: true, groups };
+    throw new Error('No groups from trovevault');
+  } catch(e) {
     return { ok: false, error: e.message, groups: [] };
   }
 }
 
-// ── ACTION: WEATHER ────────────────────────────────────────────────────────
-// Source: Open-Meteo — free, no API key required
+
 async function getWeather(venue) {
   const key   = (venue || 'dallas').toLowerCase().replace(/\s+/g, '');
   const coord = VENUE_COORDS[key] || VENUE_COORDS['dallas'];
