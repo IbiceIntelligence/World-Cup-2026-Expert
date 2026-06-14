@@ -131,9 +131,6 @@ let OFFICIAL_MATCHES = [
   ]
 
 async function getFixtures() {
-  // Official FIFA WC2026 schedule — all times ET (Eastern Time)
-  // This is our guaranteed data source — never fails, no external dependency
-;
 
   // Try to get live scores from Apify asynchronously (non-blocking)
   // If Apify has live data, merge scores into our schedule
