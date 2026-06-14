@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 2000,
+      max_tokens: 1024,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -176,17 +176,41 @@ async function getFixtures() {
 // ── GROUPS — calculated from official match schedule ─────────────────────
 async function getGroups() {
   try {
+    // Base table — all 48 teams in their groups (0 stats until they play)
+    const BASE_GROUPS = {
+      A: ['Mexico','South Korea','Czech Republic','South Africa'],
+      B: ['Canada','Switzerland','Qatar','Bosnia and Herzegovina'],
+      C: ['Brazil','Scotland','Morocco','Haiti'],
+      D: ['United States','Australia','Turkey','Paraguay'],
+      E: ['Germany','Ivory Coast','Ecuador','Curaçao'],
+      F: ['Netherlands','Japan','Sweden','Tunisia'],
+      G: ['Belgium','Iran','New Zealand','Egypt'],
+      H: ['Spain','Uruguay','Saudi Arabia','Cape Verde'],
+      I: ['France','Norway','Senegal','Iraq'],
+      J: ['Argentina','Austria','Algeria','Jordan'],
+      K: ['Portugal','Colombia','Uzbekistan','Democratic Republic of the Congo'],
+      L: ['England','Croatia','Ghana','Panama'],
+    };
+
+    // Init all teams with 0 stats
+    const groupMap = {};
+    Object.entries(BASE_GROUPS).forEach(([g, teams]) => {
+      groupMap[g] = {};
+      teams.forEach(name => {
+        groupMap[g][name] = { name, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 };
+      });
+    });
+
+    // Apply results from fixtures
     const fixturesResult = await getFixtures();
     const matches = fixturesResult.matches || [];
-
-    const groupMap = {};
     matches.forEach(m => {
       if (!m.group) return;
       const g = m.group.toUpperCase();
-      if (!groupMap[g]) groupMap[g] = {};
-
+      if (!groupMap[g]) return;
       const home = m.home.name;
       const away = m.away.name;
+      // Init if team not in base (shouldn't happen but safety)
       if (!groupMap[g][home]) groupMap[g][home] = { name:home, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 };
       if (!groupMap[g][away]) groupMap[g][away] = { name:away, played:0, won:0, drawn:0, lost:0, gf:0, ga:0, gd:0, points:0 };
 
@@ -239,140 +263,47 @@ async function runApifyActor(actorId, inputData) {
 
 // ── ACTION: MATCH ANALYSIS — worldcup-betting-expert skill ───────────────
 async function getMatchAnalysis(home, away, lang = 'es') {
+  const isES = lang !== 'en';
 
-  // Tournament context from FIFA WC2026
-  const wcContext = `FIFA World Cup 2026 Context:
-- Format: 48 teams, 12 groups of 4. Top 2 + 8 best 3rd-place advance to Round of 32.
-- Host cities: 11 USA, 3 Mexico (Mexico City, Guadalajara, Monterrey), 2 Canada (Toronto, Vancouver)
-- Dates: June 11 – July 19, 2026. Final: MetLife Stadium, New York/New Jersey.`;
+  const system = isES
+    ? `Eres el worldcup-betting-expert de FIFA 2026. Responde SOLO JSON válido, sin markdown.
+Formato exacto:
+{"summary":"2 oraciones con ⚡ pick rápido","picks":[{"market":"string","recommendation":"string","odds":"1.85","odds_american":"-118","ev":8.5,"confidence":72}],"keyFactors":["factor1","factor2","factor3"],"xgAnalysis":"1 oración xG","lineMovement":"1 oración sharp money","prediction":{"score":"2-1","note":"1 oración"}}
+REGLAS: máximo 3 picks, prediction.score debe coincidir con el ganador en picks, flags: 💎 value +5% EV, 🔥 sharp money, ⚠️ riesgo. Termina summary con: ⚠️ Solo fines informativos.`
+    : `You are the FIFA 2026 worldcup-betting-expert. Reply ONLY valid JSON, no markdown.
+Exact format:
+{"summary":"2 sentences with ⚡ quick pick","picks":[{"market":"string","recommendation":"string","odds":"1.85","odds_american":"-118","ev":8.5,"confidence":72}],"keyFactors":["factor1","factor2","factor3"],"xgAnalysis":"1 sentence xG","lineMovement":"1 sentence sharp money","prediction":{"score":"2-1","note":"1 sentence"}}
+RULES: max 3 picks, prediction.score must match winner in picks, flags: 💎 value +5% EV, 🔥 sharp money, ⚠️ risk. End summary with: ⚠️ For informational purposes only.`;
 
-  const system = lang === 'en'
-    ? `You are an expert FIFA World Cup 2026 betting analyst using the worldcup-betting-expert framework.
+  const user = isES
+    ? `Analiza FIFA World Cup 2026: ${home} vs ${away}. Aplica xG, H2H, valor, movimiento de línea. JSON únicamente.`
+    : `Analyze FIFA World Cup 2026: ${home} vs ${away}. Apply xG, H2H, value detection, line movement. JSON only.`;
 
-${wcContext}
+  try {
+    const result = await callClaude(system, user);
 
-ANALYTICAL FRAMEWORK:
-1. VALUE BET DETECTION: Implied probability = 1/decimal odds. Edge = Your probability − Implied probability. Flag +5%+ edges with 💎
-2. xG MODEL: Use qualifying campaign averages to estimate expected goals. Compare to bookmaker over/under line.
-3. HEAD-TO-HEAD & FORM: Last 5 H2H results + last 5 matches each team. Tournament-specific pressure.
-4. ASIAN HANDICAP: For uneven matchups, calculate if xG dominance justifies the handicap line.
-5. LINE MOVEMENT: Odds shortening fast = sharp money. Late steam (within 2h) = most reliable signal.
-6. CROWD WISDOM: Consider market-implied probabilities.
-
-REPORT FORMAT — return ONLY valid JSON:
-{
-  "summary": "2-3 sentence narrative with ⚡ Quick Pick (the 1-2 best bets in plain English)",
-  "picks": [
-    {
-      "market": "market name (e.g. Match Winner, Over/Under 2.5, Asian Handicap -1)",
-      "recommendation": "specific bet (e.g. Brazil to Win, Over 2.5 Goals 💎)",
-      "odds": "decimal odds as string e.g. 1.85",
-      "odds_american": "American format e.g. -118",
-      "ev": number (edge % e.g. 8.5),
-      "confidence": number 0-100
-    }
-  ],
-  "keyFactors": ["4-6 specific factors with data — xG, H2H, injuries, line movement, crowd wisdom"],
-  "xgAnalysis": "1-2 sentences on expected goals model",
-  "lineMovement": "1 sentence on sharp money signals if any",
-  "prediction": {
-    "score": "X-Y format e.g. 2-1 — MUST be consistent with your picks",
-    "note": "1 sentence explanation"
-  }
-}
-
-RULES:
-- Odds in both decimal AND American format
-- Flag value bets with 💎 | Risk with ⚠️ | Sharp money with 🔥
-- prediction.score MUST match the winner in your picks — no contradictions
-- End summary with: "⚠️ Sports betting involves financial risk. For informational purposes only."`
-
-    : `Eres un analista experto de apuestas FIFA Copa Mundial 2026 usando el framework worldcup-betting-expert.
-
-${wcContext}
-
-FRAMEWORK DE ANÁLISIS:
-1. DETECCIÓN DE VALOR: Probabilidad implícita = 1/cuota decimal. Edge = Tu probabilidad − Probabilidad implícita. Marca edges +5%+ con 💎
-2. MODELO xG: Usa promedios de la campaña de clasificación para estimar goles esperados. Compara con la línea Over/Under.
-3. H2H Y FORMA: Últimos 5 H2H + últimos 5 partidos de cada equipo. Presión específica del torneo.
-4. HÁNDICAP ASIÁTICO: Para enfrentamientos disparejos, calcula si el dominio xG justifica la línea.
-5. MOVIMIENTO DE LÍNEA: Cuotas que bajan rápido = dinero sharp. Steam tardío (2h antes) = señal más confiable.
-6. SABIDURÍA DEL MERCADO: Considera probabilidades implícitas del mercado.
-
-FORMATO — responde SOLO con JSON válido:
-{
-  "summary": "2-3 oraciones con ⚡ Pick Rápido (las 1-2 mejores apuestas en lenguaje claro)",
-  "picks": [
-    {
-      "market": "nombre del mercado (ej: Ganador del Partido, Más/Menos 2.5, Hándicap Asiático -1)",
-      "recommendation": "apuesta específica (ej: Brasil Gana, Más de 2.5 Goles 💎)",
-      "odds": "cuota decimal como string ej: 1.85",
-      "odds_american": "formato americano ej: -118",
-      "ev": número (edge % ej: 8.5),
-      "confidence": número 0-100
-    }
-  ],
-  "keyFactors": ["4-6 factores específicos con datos — xG, H2H, lesiones, movimiento de línea, mercado"],
-  "xgAnalysis": "1-2 oraciones sobre el modelo de goles esperados",
-  "lineMovement": "1 oración sobre señales de dinero sharp si las hay",
-  "prediction": {
-    "score": "formato X-Y ej: 2-1 — DEBE ser consistente con tus picks",
-    "note": "1 oración explicativa"
-  }
-}
-
-REGLAS:
-- Cuotas en formato decimal Y americano
-- Marca value bets con 💎 | Riesgo con ⚠️ | Dinero sharp con 🔥
-- prediction.score DEBE coincidir con el ganador en tus picks — sin contradicciones
-- Termina el summary con: "⚠️ Las apuestas deportivas conllevan riesgo financiero. Solo con fines informativos."`;
-
-  const user = lang === 'en'
-    ? `Analyze this FIFA World Cup 2026 match using the full betting expert framework:
-Match: ${home} vs ${away}
-Apply: xG model, H2H analysis, value bet detection, line movement signals, crowd wisdom.
-Deliver: Quick picks, full analysis, Asian handicap if relevant, score prediction consistent with your analysis.`
-    : `Analiza este partido de la Copa Mundial FIFA 2026 usando el framework completo del experto en apuestas:
-Partido: ${home} vs ${away}
-Aplica: modelo xG, análisis H2H, detección de valor, señales de movimiento de línea, sabiduría del mercado.
-Entrega: picks rápidos, análisis completo, hándicap asiático si aplica, predicción de marcador consistente con tu análisis.`;
-
-  const result = await callClaude(system, user);
-
-  // Auto-correct prediction score to match implied winner from picks
-  if (result && result.picks && result.prediction) {
-    const picks = result.picks || [];
-    // Find the most confident "win" pick to determine likely winner
-    const winPick = picks.find(p =>
-      p.recommendation && (
-        p.recommendation.toLowerCase().includes('gana') ||
-        p.recommendation.toLowerCase().includes('wins') ||
-        p.recommendation.toLowerCase().includes('victoria') ||
-        p.recommendation.toLowerCase().includes('win')
-      )
-    );
-    if (winPick && result.prediction.score) {
-      const scoreStr = result.prediction.score;
-      const parts = scoreStr.split('-').map(s => parseInt(s.trim()));
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        const homeWins = parts[0] > parts[1];
-        const awayWins = parts[1] > parts[0];
-        const recLower = winPick.recommendation.toLowerCase();
-        // Check if the recommended winner is home or away team
-        const recHome = recLower.includes(home.toLowerCase().split(' ')[0].toLowerCase());
-        const recAway = recLower.includes(away.toLowerCase().split(' ')[0].toLowerCase());
-        // If contradiction detected — swap the score
-        if ((recHome && awayWins) || (recAway && homeWins)) {
+    // Auto-correct prediction score consistency
+    if (result.picks && result.picks.length > 0 && result.prediction && result.prediction.score) {
+      const parts = result.prediction.score.split('-');
+      if (parts.length === 2) {
+        const homeGoals = parseInt(parts[0]);
+        const awayGoals = parseInt(parts[1]);
+        const topPick = result.picks[0].recommendation || '';
+        const awayWinSignal = topPick.toLowerCase().includes(away.toLowerCase()) ||
+          topPick.toLowerCase().includes('away') || topPick.toLowerCase().includes('visitante');
+        const drawSignal = topPick.toLowerCase().includes('draw') ||
+          topPick.toLowerCase().includes('empate') || topPick.toLowerCase().includes('x');
+        if (awayWinSignal && homeGoals > awayGoals) {
           result.prediction.score = parts[1] + '-' + parts[0];
-          result.prediction.note = (result.prediction.note || '') + ' [score corrected for consistency]';
         }
       }
     }
+    return result;
+  } catch(e) {
+    return { error: e.message };
   }
-  return result;
 }
 
-// ── ACTION: INJURIES ANALYSIS (Claude + web context) ──────────────────────
 async function getInjuriesAnalysis(lang = 'es') {
   const system = lang === 'en'
     ? `You are a FIFA World Cup 2026 injury intelligence analyst.
