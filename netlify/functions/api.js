@@ -1,3 +1,4 @@
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_KEY || process.env.ANTHROPIC_API_KEY;
 const APIFY_API_TOKEN   = process.env.APIFY_API_TOKEN;
 const MODEL = 'claude-sonnet-4-5';
 
