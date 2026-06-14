@@ -74,10 +74,7 @@ const VENUE_COORDS = {
 // Source: Apify actors — trovevault + kindly_bolt
 // ── FIXTURES — Official WC2026 schedule as primary, Apify async as enhancement
 // The official schedule is always available instantly. Apify runs async separately.
-async function getFixtures() {
-  // Official FIFA WC2026 schedule — all times ET (Eastern Time)
-  // This is our guaranteed data source — never fails, no external dependency
-  const OFFICIAL_MATCHES = [
+let OFFICIAL_MATCHES = [
     // ── JUN 11 ──
     { id:'m01', home:{name:'Mexico'},       away:{name:'South Africa'},          date:'06/11/2026 15:00', group:'A', status:'finished', homeScore:2, awayScore:0 },
     { id:'m02', home:{name:'South Korea'},  away:{name:'Czech Republic'},        date:'06/11/2026 22:00', group:'A', status:'finished', homeScore:2, awayScore:1 },
@@ -130,7 +127,12 @@ async function getFixtures() {
     { id:'m39', home:{name:'Uruguay'},      away:{name:'Cape Verde'},            date:'06/21/2026 18:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
     { id:'m40', home:{name:'New Zealand'}, away:{name:'Egypt'},                  date:'06/21/2026 21:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
   
-  ];
+  ]
+
+async function getFixtures() {
+  // Official FIFA WC2026 schedule — all times ET (Eastern Time)
+  // This is our guaranteed data source — never fails, no external dependency
+;
 
   // Try to get live scores from Apify asynchronously (non-blocking)
   // If Apify has live data, merge scores into our schedule
