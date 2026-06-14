@@ -1578,9 +1578,9 @@ function renderFixtures(matches) {
   const todayUpcoming = todayAll.filter(m => m.status === 'scheduled');
   const displayToday  = [...todayLive, ...todayFinished, ...todayUpcoming];
 
-  // Dashboard — top 3 today
+  // Dashboard — all today's matches
   const dashGrid = document.querySelector('#view-dashboard .matches-grid');
-  if (dashGrid) dashGrid.innerHTML = displayToday.slice(0, 3).map(cardHTMLWithClick).join('');
+  if (dashGrid) dashGrid.innerHTML = displayToday.map(cardHTMLWithClick).join('');
 
   // Partidos — all today (tab filter can change this)
   const partGrid = document.querySelector('#view-partidos .matches-grid');
