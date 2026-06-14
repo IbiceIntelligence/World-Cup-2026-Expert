@@ -198,35 +198,105 @@ async function getWeather(venue) {
   }
 }
 
-// ── ACTION: MATCH ANALYSIS (existing Claude flow) ─────────────────────────
+// ── ACTION: MATCH ANALYSIS — worldcup-betting-expert skill ───────────────
 async function getMatchAnalysis(home, away, lang = 'es') {
+
+  // Tournament context from FIFA WC2026
+  const wcContext = `FIFA World Cup 2026 Context:
+- Format: 48 teams, 12 groups of 4. Top 2 + 8 best 3rd-place advance to Round of 32.
+- Host cities: 11 USA, 3 Mexico (Mexico City, Guadalajara, Monterrey), 2 Canada (Toronto, Vancouver)
+- Dates: June 11 – July 19, 2026. Final: MetLife Stadium, New York/New Jersey.`;
+
   const system = lang === 'en'
-    ? `You are an expert FIFA World Cup 2026 betting analyst.
-       Return ONLY valid JSON with these exact keys:
-       - summary: string (2-3 sentences narrative analysis)
-       - picks: array of up to 4 objects with {market, recommendation, odds, ev, confidence}
-         where odds is a decimal number string like "1.85", ev is a number like 8.5, confidence is 0-100
-       - keyFactors: array of 4-6 strings
-       - prediction: object with EXACTLY {score, note} where:
-           * score MUST be "X-Y" number format e.g. "2-1"
-           * The score MUST be consistent with your picks and summary. If you recommend betting on Team A winning, Team A must have more goals in the score.
-           * note is a 1-sentence explanation consistent with your analysis
-       CRITICAL: The prediction score must match the winner implied by your picks. Do not contradict yourself.`
-    : `Eres un analista experto de apuestas para la Copa Mundial FIFA 2026.
-       Responde SOLO con JSON válido con estas claves exactas:
-       - summary: string (análisis narrativo de 2-3 oraciones)
-       - picks: array de hasta 4 objetos con {market, recommendation, odds, ev, confidence}
-         donde odds es decimal como "1.85", ev es número como 8.5, confidence es 0-100
-       - keyFactors: array de 4-6 strings
-       - prediction: objeto con EXACTAMENTE {score, note} donde:
-           * score DEBE ser formato "X-Y" con números ej: "2-1"
-           * El score DEBE ser consistente con tus picks y summary. Si recomiendas apostar al Equipo A ganando, el Equipo A debe tener más goles en el score.
-           * note es una oración explicativa consistente con tu análisis
-       CRÍTICO: La predicción de marcador debe coincidir con el ganador implícito en tus picks. No te contradigas.`;
+    ? `You are an expert FIFA World Cup 2026 betting analyst using the worldcup-betting-expert framework.
+
+${wcContext}
+
+ANALYTICAL FRAMEWORK:
+1. VALUE BET DETECTION: Implied probability = 1/decimal odds. Edge = Your probability − Implied probability. Flag +5%+ edges with 💎
+2. xG MODEL: Use qualifying campaign averages to estimate expected goals. Compare to bookmaker over/under line.
+3. HEAD-TO-HEAD & FORM: Last 5 H2H results + last 5 matches each team. Tournament-specific pressure.
+4. ASIAN HANDICAP: For uneven matchups, calculate if xG dominance justifies the handicap line.
+5. LINE MOVEMENT: Odds shortening fast = sharp money. Late steam (within 2h) = most reliable signal.
+6. CROWD WISDOM: Consider market-implied probabilities.
+
+REPORT FORMAT — return ONLY valid JSON:
+{
+  "summary": "2-3 sentence narrative with ⚡ Quick Pick (the 1-2 best bets in plain English)",
+  "picks": [
+    {
+      "market": "market name (e.g. Match Winner, Over/Under 2.5, Asian Handicap -1)",
+      "recommendation": "specific bet (e.g. Brazil to Win, Over 2.5 Goals 💎)",
+      "odds": "decimal odds as string e.g. 1.85",
+      "odds_american": "American format e.g. -118",
+      "ev": number (edge % e.g. 8.5),
+      "confidence": number 0-100
+    }
+  ],
+  "keyFactors": ["4-6 specific factors with data — xG, H2H, injuries, line movement, crowd wisdom"],
+  "xgAnalysis": "1-2 sentences on expected goals model",
+  "lineMovement": "1 sentence on sharp money signals if any",
+  "prediction": {
+    "score": "X-Y format e.g. 2-1 — MUST be consistent with your picks",
+    "note": "1 sentence explanation"
+  }
+}
+
+RULES:
+- Odds in both decimal AND American format
+- Flag value bets with 💎 | Risk with ⚠️ | Sharp money with 🔥
+- prediction.score MUST match the winner in your picks — no contradictions
+- End summary with: "⚠️ Sports betting involves financial risk. For informational purposes only."`
+
+    : `Eres un analista experto de apuestas FIFA Copa Mundial 2026 usando el framework worldcup-betting-expert.
+
+${wcContext}
+
+FRAMEWORK DE ANÁLISIS:
+1. DETECCIÓN DE VALOR: Probabilidad implícita = 1/cuota decimal. Edge = Tu probabilidad − Probabilidad implícita. Marca edges +5%+ con 💎
+2. MODELO xG: Usa promedios de la campaña de clasificación para estimar goles esperados. Compara con la línea Over/Under.
+3. H2H Y FORMA: Últimos 5 H2H + últimos 5 partidos de cada equipo. Presión específica del torneo.
+4. HÁNDICAP ASIÁTICO: Para enfrentamientos disparejos, calcula si el dominio xG justifica la línea.
+5. MOVIMIENTO DE LÍNEA: Cuotas que bajan rápido = dinero sharp. Steam tardío (2h antes) = señal más confiable.
+6. SABIDURÍA DEL MERCADO: Considera probabilidades implícitas del mercado.
+
+FORMATO — responde SOLO con JSON válido:
+{
+  "summary": "2-3 oraciones con ⚡ Pick Rápido (las 1-2 mejores apuestas en lenguaje claro)",
+  "picks": [
+    {
+      "market": "nombre del mercado (ej: Ganador del Partido, Más/Menos 2.5, Hándicap Asiático -1)",
+      "recommendation": "apuesta específica (ej: Brasil Gana, Más de 2.5 Goles 💎)",
+      "odds": "cuota decimal como string ej: 1.85",
+      "odds_american": "formato americano ej: -118",
+      "ev": número (edge % ej: 8.5),
+      "confidence": número 0-100
+    }
+  ],
+  "keyFactors": ["4-6 factores específicos con datos — xG, H2H, lesiones, movimiento de línea, mercado"],
+  "xgAnalysis": "1-2 oraciones sobre el modelo de goles esperados",
+  "lineMovement": "1 oración sobre señales de dinero sharp si las hay",
+  "prediction": {
+    "score": "formato X-Y ej: 2-1 — DEBE ser consistente con tus picks",
+    "note": "1 oración explicativa"
+  }
+}
+
+REGLAS:
+- Cuotas en formato decimal Y americano
+- Marca value bets con 💎 | Riesgo con ⚠️ | Dinero sharp con 🔥
+- prediction.score DEBE coincidir con el ganador en tus picks — sin contradicciones
+- Termina el summary con: "⚠️ Las apuestas deportivas conllevan riesgo financiero. Solo con fines informativos."`;
 
   const user = lang === 'en'
-    ? `Analyze the FIFA World Cup 2026 match: ${home} vs ${away}. Give betting recommendations with expected value and a score prediction.`
-    : `Analiza el partido de Copa Mundial FIFA 2026: ${home} vs ${away}. Da recomendaciones de apuesta con valor esperado y una predicción de marcador.`;
+    ? `Analyze this FIFA World Cup 2026 match using the full betting expert framework:
+Match: ${home} vs ${away}
+Apply: xG model, H2H analysis, value bet detection, line movement signals, crowd wisdom.
+Deliver: Quick picks, full analysis, Asian handicap if relevant, score prediction consistent with your analysis.`
+    : `Analiza este partido de la Copa Mundial FIFA 2026 usando el framework completo del experto en apuestas:
+Partido: ${home} vs ${away}
+Aplica: modelo xG, análisis H2H, detección de valor, señales de movimiento de línea, sabiduría del mercado.
+Entrega: picks rápidos, análisis completo, hándicap asiático si aplica, predicción de marcador consistente con tu análisis.`;
 
   const result = await callClaude(system, user);
 
