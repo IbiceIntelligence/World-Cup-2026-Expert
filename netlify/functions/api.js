@@ -464,25 +464,6 @@ async function parseRSS(url, sourceLabel, tagDefault) {
 
 
 // ── WEATHER — Open-Meteo (free, no key) ──────────────────────────────────
-const VENUE_COORDS = {
-  dallas:        { lat:32.7767, lon:-96.7970, name:'AT&T Stadium · Dallas' },
-  losangeles:    { lat:34.0141, lon:-118.2879,name:'SoFi Stadium · Los Angeles' },
-  newjersey:     { lat:40.8128, lon:-74.0742, name:'MetLife Stadium · New Jersey' },
-  miami:         { lat:25.9580, lon:-80.2389, name:'Hard Rock Stadium · Miami' },
-  houston:       { lat:29.6847, lon:-95.4107, name:'NRG Stadium · Houston' },
-  boston:        { lat:42.0909, lon:-71.2643, name:'Gillette Stadium · Boston' },
-  seattle:       { lat:47.5952, lon:-122.3316,name:'Lumen Field · Seattle' },
-  atlanta:       { lat:33.7553, lon:-84.4006, name:'Mercedes-Benz Stadium · Atlanta' },
-  kansas:        { lat:39.0489, lon:-94.4839, name:'Arrowhead Stadium · Kansas City' },
-  philadelphia:  { lat:39.9008, lon:-75.1675, name:'Lincoln Financial · Philadelphia' },
-  sanfrancisco:  { lat:37.4033, lon:-121.9694,name:"Levi's Stadium · San Jose" },
-  vancouver:     { lat:49.2767, lon:-123.1116,name:'BC Place · Vancouver' },
-  toronto:       { lat:43.6333, lon:-79.4189, name:'BMO Field · Toronto' },
-  mexicocity:    { lat:19.3029, lon:-99.1505, name:'Estadio Azteca · CDMX' },
-  guadalajara:   { lat:20.6847, lon:-103.3823,name:'Estadio Akron · Guadalajara' },
-  monterrey:     { lat:25.6693, lon:-100.3096,name:'Estadio BBVA · Monterrey' },
-};
-
 async function getWeather(venue) {
   const key = (venue || 'dallas').toLowerCase().replace(/[^a-z]/g,'');
   const coord = VENUE_COORDS[key] || VENUE_COORDS['dallas'];
