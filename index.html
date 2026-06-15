@@ -123,7 +123,7 @@ main { padding: 24px; }
 .mb-upcoming { background: var(--bg3); color: var(--text3); border: 0.5px solid var(--border); }
 
 /* ── GROUPS TABLE ── */
-.groups-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.groups-wrap { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .group-card { background: var(--bg2); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
 .group-header { background: var(--bg3); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 0.5px solid var(--border); }
 .group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; color: var(--gold); }
