@@ -90,8 +90,8 @@ let OFFICIAL_MATCHES = [
     { id:'m08', home:{name:'Australia'},    away:{name:'Turkey'},                date:'06/14/2026 00:00', group:'D', status:'finished', homeScore:2, awayScore:0 },
     { id:'m09', home:{name:'Germany'},      away:{name:'Curaçao'},               date:'06/14/2026 13:00', group:'E', status:'finished', homeScore:7, awayScore:1 },
     { id:'m10', home:{name:'Netherlands'}, away:{name:'Japan'},                  date:'06/14/2026 16:00', group:'F', status:'finished', homeScore:2, awayScore:2 },
-    { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'live', homeScore:0, awayScore:0, minute:'HT' },
-    { id:'m12', home:{name:'Sweden'},       away:{name:'Tunisia'},               date:'06/14/2026 22:00', group:'F', status:'scheduled', homeScore:null, awayScore:null },
+    { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'finished', homeScore:1, awayScore:0 },
+    { id:'m12', home:{name:'Sweden'},       away:{name:'Tunisia'},               date:'06/14/2026 22:00', group:'F', status:'finished', homeScore:5, awayScore:1 },
     // ── JUN 15 ──
     { id:'m13', home:{name:'Spain'},        away:{name:'Cape Verde'},            date:'06/15/2026 12:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
     { id:'m14', home:{name:'Belgium'},      away:{name:'Egypt'},                 date:'06/15/2026 15:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
@@ -182,7 +182,56 @@ async function getFixtures() {
       }
     }
   } catch(e) {
-    // RAG browser failed — use official schedule as-is
+    // RAG browser failed — try Apify actors as fallback
+    try {
+      if (APIFY_API_TOKEN) {
+        const liveData = await Promise.race([
+          runApifyActor('trovevault/world-cup-results-tables', {
+            year: '2026', stage: 'group', includeMatches: true,
+            includeGroupTables: false, maxMatches: 104,
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+        ]);
+        if (Array.isArray(liveData) && liveData.length > 0) {
+          liveData.forEach(live => {
+            const homeName = live.homeTeam || live.home_team || live.team_home || '';
+            const awayName = live.awayTeam || live.away_team || live.team_away || '';
+            const match = OFFICIAL_MATCHES.find(m => m.home.name === homeName && m.away.name === awayName);
+            if (match) {
+              const hs = live.homeScore ?? live.home_score ?? null;
+              const as = live.awayScore ?? live.away_score ?? null;
+              if (hs !== null) match.homeScore = parseInt(hs);
+              if (as !== null) match.awayScore = parseInt(as);
+              if (live.status === 'finished') match.status = 'finished';
+              else if (live.status === 'live') { match.status = 'live'; match.minute = live.minute || null; }
+            }
+          });
+        }
+      }
+    } catch(e2) {
+      // Try kindly_bolt as final fallback
+      try {
+        if (APIFY_API_TOKEN) {
+          const items2 = await Promise.race([
+            runApifyActor('kindly_bolt/wc2026-actors', { include_results: true, language: 'en' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+          ]);
+          if (Array.isArray(items2) && items2.length > 0) {
+            items2.forEach(live => {
+              const match = OFFICIAL_MATCHES.find(m =>
+                m.home.name === (live.team_home || live.homeTeam || '') &&
+                m.away.name === (live.team_away || live.awayTeam || '')
+              );
+              if (match && (live.status === 'finished' || live.status === 'live')) {
+                if (live.score_home != null) match.homeScore = parseInt(live.score_home);
+                if (live.score_away != null) match.awayScore = parseInt(live.score_away);
+                match.status = live.status;
+              }
+            });
+          }
+        }
+      } catch(e3) { /* all sources failed — use official schedule */ }
+    }
   }
   return { ok: true, matches: OFFICIAL_MATCHES };
 }
@@ -575,11 +624,19 @@ async function getWorldCupNews(lang) {
     return true;
   });
 
-  // WC articles first, then other football — for ES only show football/soccer topics
-  const wcFirst = unique.filter(a =>
+  // Filter out articles older than 30 days
+  const fresh = unique.filter(a => {
+    if (!a.timeAgo) return true;
+    const daysMatch = a.timeAgo.match(/(\d+)\s*days?/i);
+    if (daysMatch && parseInt(daysMatch[1]) > 30) return false;
+    return true;
+  });
+
+  // WC articles first, then other football
+  const wcFirst = fresh.filter(a =>
     /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
   );
-  const footballOther = unique.filter(a =>
+  const footballOther = fresh.filter(a =>
     !/world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
   );
 
