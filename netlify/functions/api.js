@@ -93,7 +93,7 @@ let OFFICIAL_MATCHES = [
     { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'finished', homeScore:1, awayScore:0 },
     { id:'m12', home:{name:'Sweden'},       away:{name:'Tunisia'},               date:'06/14/2026 22:00', group:'F', status:'finished', homeScore:5, awayScore:1 },
     // ── JUN 15 ──
-    { id:'m13', home:{name:'Spain'},        away:{name:'Cape Verde'},            date:'06/15/2026 12:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
+    { id:'m13', home:{name:'Spain'},        away:{name:'Cape Verde'},            date:'06/15/2026 12:00', group:'H', status:'live', homeScore:0, awayScore:0, minute:'HT' },
     { id:'m14', home:{name:'Belgium'},      away:{name:'Egypt'},                 date:'06/15/2026 15:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
     { id:'m15', home:{name:'Saudi Arabia'},away:{name:'Uruguay'},                date:'06/15/2026 18:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
     { id:'m16', home:{name:'Iran'},         away:{name:'New Zealand'},           date:'06/15/2026 21:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
