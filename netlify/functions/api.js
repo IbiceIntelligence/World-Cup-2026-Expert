@@ -90,7 +90,7 @@ let OFFICIAL_MATCHES = [
     { id:'m08', home:{name:'Australia'},    away:{name:'Turkey'},                date:'06/14/2026 00:00', group:'D', status:'finished', homeScore:2, awayScore:0 },
     { id:'m09', home:{name:'Germany'},      away:{name:'Curaçao'},               date:'06/14/2026 13:00', group:'E', status:'finished', homeScore:7, awayScore:1 },
     { id:'m10', home:{name:'Netherlands'}, away:{name:'Japan'},                  date:'06/14/2026 16:00', group:'F', status:'finished', homeScore:2, awayScore:2 },
-    { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'scheduled', homeScore:null, awayScore:null },
+    { id:'m11', home:{name:'Ivory Coast'}, away:{name:'Ecuador'},                date:'06/14/2026 19:00', group:'E', status:'live', homeScore:0, awayScore:0, minute:'HT' },
     { id:'m12', home:{name:'Sweden'},       away:{name:'Tunisia'},               date:'06/14/2026 22:00', group:'F', status:'scheduled', homeScore:null, awayScore:null },
     // ── JUN 15 ──
     { id:'m13', home:{name:'Spain'},        away:{name:'Cape Verde'},            date:'06/15/2026 12:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
@@ -132,67 +132,57 @@ let OFFICIAL_MATCHES = [
 
 async function getFixtures() {
 
-  // Try to get live scores from Apify asynchronously (non-blocking)
-  // If Apify has live data, merge scores into our schedule
+  // Live score enrichment via Apify RAG Web Browser
+  // apify/rag-web-browser acts as a proxy — bypasses 403s, returns in 3-5s
   try {
     if (APIFY_API_TOKEN) {
-      const liveData = await Promise.race([
-        runApifyActor('trovevault/world-cup-results-tables', {
-          year: '2026', stage: 'group', includeMatches: true,
-          includeGroupTables: false, maxMatches: 104,
-        }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+      const ragResult = await Promise.race([
+        fetchJSON(
+          `https://rag-web-browser.apify.actor/search?query=world+cup+2026+live+scores+today+results&maxResults=1&outputFormats=text`,
+          { headers: { 'Authorization': `Bearer ${APIFY_API_TOKEN}` } }
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 7000))
       ]);
 
-      if (Array.isArray(liveData) && liveData.length > 0) {
-        // Merge live scores into official schedule
-        liveData.forEach(live => {
-          const homeName = live.homeTeam || live.home_team || live.team_home || '';
-          const awayName = live.awayTeam || live.away_team || live.team_away || '';
-          const match = OFFICIAL_MATCHES.find(m =>
-            m.home.name === homeName && m.away.name === awayName
-          );
-          if (match) {
-            const hs = live.homeScore ?? live.home_score ?? live.score_home ?? null;
-            const as = live.awayScore ?? live.away_score ?? live.score_away ?? null;
-            if (hs !== null) match.homeScore = parseInt(hs);
-            if (as !== null) match.awayScore = parseInt(as);
-            const isFinished = live.status === 'finished' || live.finished === true;
-            const isLive = live.status === 'live' || live.live === true;
-            if (isFinished) match.status = 'finished';
-            else if (isLive) { match.status = 'live'; match.minute = live.minute || live.elapsed || null; }
+      // Parse scores from text using regex patterns
+      if (ragResult && (Array.isArray(ragResult) ? ragResult[0]?.text : ragResult?.text)) {
+        const text = Array.isArray(ragResult) ? ragResult[0].text : ragResult.text;
+
+        // Parse patterns like "Team A 2-1 Team B" or "Team A vs Team B 2 - 1"
+        OFFICIAL_MATCHES.forEach(m => {
+          if (m.status === 'finished') return; // skip already finished
+          const home = m.home.name;
+          const away = m.away.name;
+
+          // Look for score pattern near team names
+          const patterns = [
+            new RegExp(`${home}[\s\S]{0,30}?(\d+)[\s-]+(\d+)[\s\S]{0,30}?${away}`, 'i'),
+            new RegExp(`${away}[\s\S]{0,30}?(\d+)[\s-]+(\d+)[\s\S]{0,30}?${home}`, 'i'),
+            new RegExp(`${home}\s+(\d+)-(\d+)\s+${away}`, 'i'),
+          ];
+
+          for (const pattern of patterns) {
+            const match = text.match(pattern);
+            if (match) {
+              m.homeScore = parseInt(match[1]);
+              m.awayScore = parseInt(match[2]);
+              // Determine if live or finished based on context
+              const nearText = text.substring(Math.max(0, text.indexOf(match[0])-100), text.indexOf(match[0])+200);
+              if (/full.?time|ft|final|finished|ended/i.test(nearText)) {
+                m.status = 'finished';
+              } else if (/live|'|min|half.?time|ht/i.test(nearText)) {
+                m.status = 'live';
+                const minMatch = nearText.match(/(\d+)['']/);
+                if (minMatch) m.minute = minMatch[1] + "'";
+              }
+              break;
+            }
           }
         });
       }
     }
-  } catch(e1) {
-    // trovevault failed — try kindly_bolt as fallback
-    try {
-      if (APIFY_API_TOKEN) {
-        const items2 = await Promise.race([
-          runApifyActor('kindly_bolt/wc2026-actors', { include_results: true, language: 'en' }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-        ]);
-        if (Array.isArray(items2) && items2.length > 0) {
-          items2.forEach(live => {
-            const homeName = live.team_home || live.homeTeam || '';
-            const awayName = live.team_away || live.awayTeam || '';
-            const match = OFFICIAL_MATCHES.find(m => m.home.name === homeName && m.away.name === awayName);
-            if (match && (live.status === 'finished' || live.status === 'live')) {
-              const hs = live.score_home ?? live.homeScore ?? null;
-              const as = live.score_away ?? live.awayScore ?? null;
-              if (hs !== null) match.homeScore = parseInt(hs);
-              if (as !== null) match.awayScore = parseInt(as);
-              match.status = live.status;
-              if (live.status === 'live') match.minute = live.minute || null;
-            }
-          });
-        }
-      }
-    } catch(e2) {
-      // Both Apify actors failed — use official schedule
-    }
-
+  } catch(e) {
+    // RAG browser failed — use official schedule as-is
   }
   return { ok: true, matches: OFFICIAL_MATCHES };
 }
