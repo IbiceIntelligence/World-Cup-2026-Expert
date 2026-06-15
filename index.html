@@ -1908,12 +1908,10 @@ async function loadLiveData() {
   try {
     const res = await fetch(`${API}?action=groups`);
     const data = await res.json();
-    if (data.ok && data.groups) {
-      // Calculate our own standings from finished fixtures
-      const calcGroups = calcStandingsFromFixtures(allMatchesCache);
-      // Merge: our calculations override stale API data
-      const merged = mergeGroupsWithFixtures(data.groups, calcGroups);
-      renderGroups(merged);
+    if (data.ok && data.groups && data.groups.length > 0) {
+      // Backend already has BASE_GROUPS with all 12 groups calculated
+      // Use directly without merging to ensure all 12 groups show
+      renderGroups(data.groups);
     }
   } catch(e) {
     console.error('groups error:', e);
