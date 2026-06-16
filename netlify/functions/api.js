@@ -601,6 +601,10 @@ async function getWorldCupNews(lang) {
     { url: 'https://www.tycsports.com/rss/',                                               source: 'TyC Sports'    },
     // El Tiempo Colombia — deportes
     { url: 'https://www.eltiempo.com/rss/deportes_futbol-internacional.xml',               source: 'El Tiempo'     },
+    // AS Colombia — análisis post-partido
+    { url: 'https://colombia.as.com/rss/futbol/futbol-internacional.xml',                  source: 'AS Colombia'   },
+    // Infobae deportes — análisis y resultados
+    { url: 'https://www.infobae.com/feeds/rss/deportes/',                                  source: 'Infobae'       },
   ];
 
   const sources = isES ? RSS_ES : RSS_EN;
@@ -633,14 +637,11 @@ async function getWorldCupNews(lang) {
   });
 
   // WC articles first, then other football
-  const wcFirst = fresh.filter(a =>
-    /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
-  );
-  const footballOther = fresh.filter(a =>
-    !/world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial/i.test(a.title)
-  );
-
-  const final = [...wcFirst, ...footballOther].slice(0, 8);
+  // Solo noticias del Mundial — sin otros torneos
+  const final = fresh.filter(a =>
+    /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial|seleccion nacional|seleccion/i.test(a.title) ||
+    a.tag === 'RESULT' || a.tag === 'INJURY' || a.tag === 'BAJA'
+  ).slice(0, 12);
 
   if (final.length > 0) {
     return { ok: true, source: 'rss', articles: final };
