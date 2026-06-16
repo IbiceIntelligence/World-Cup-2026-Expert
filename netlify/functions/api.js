@@ -694,11 +694,12 @@ async function getWorldCupNews(lang) {
     return true;
   });
 
-  // Filter out articles older than 30 days
+  // Filter by freshness — ES: 48 hours max (ES sources include archive/context articles), EN: 30 days
+  const maxAgeDays = isES ? 2 : 30;
   const fresh = unique.filter(a => {
     if (!a.timeAgo) return true;
     const daysMatch = a.timeAgo.match(/(\d+)\s*days?/i);
-    if (daysMatch && parseInt(daysMatch[1]) > 30) return false;
+    if (daysMatch && parseInt(daysMatch[1]) > maxAgeDays) return false;
     return true;
   });
 
