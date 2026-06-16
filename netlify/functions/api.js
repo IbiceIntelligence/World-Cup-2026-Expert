@@ -524,7 +524,7 @@ async function parseRSS(url, sourceLabel, tagDefault) {
         tag = 'BAJA';
 
       // RESULT — match results, scores
-      else if (/beats |beat |defeat|wins |won |victory|equalis|equaliz|thrash|clinch|gana |gano |vencio|derrota|empat|logra|logro|consigue|primer punto|primer gol|debut con|estrena con|[0-9]-[0-9]|[0-9] a [0-9]|saca la casta|avanza|clasifica/.test(t))
+      else if (/beats |beat |defeat|wins |won |victory|equalis|equaliz|thrash|clinch|gana |gano |vencio|derrota|empat|logra|logro|consigue|primer punto|primer gol|debut con|estrena con|[0-9]-[0-9]|[0-9] a [0-9]|saca la casta|avanza|clasifica|goleada|victoria|triunfo|marcó|score|vence |vencen|eliminado|clasifica|pasa a|cae ante|cayo ante|remonta/.test(t))
         tag = 'RESULT';
 
       // ODDS — betting markets
