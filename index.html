@@ -1377,25 +1377,15 @@ const MATCH_DISPLAY_CORRECTIONS = Object.fromEntries(
 );
 
 function matchEffectiveDateStr(m) {
+  // Use isoDate field if available (definitive, no parsing needed)
+  if (m.isoDate) return m.isoDate;
+  // Fallback: parse from date string MM/DD/YYYY HH:MM
   if (!m.date) return '';
-  // Check correction map first
-  const homeAway = (m.home && m.away)
-    ? m.home.name + '-' + m.away.name
-    : '';
-  if (MATCH_DATE_CORRECTIONS[homeAway]) return MATCH_DATE_CORRECTIONS[homeAway];
-
-  const [datePart, timePart] = m.date.split(' ');
+  const [datePart] = m.date.split(' ');
   const parts = datePart ? datePart.split('/') : [];
   if (parts.length < 3) return '';
-  const hour = timePart ? parseInt(timePart.split(':')[0]) : 12;
-  const min  = timePart ? parseInt((timePart.split(':')[1])||0) : 0;
-  const dt = new Date(parseInt(parts[2]), parseInt(parts[0])-1, parseInt(parts[1]), hour, min, 0);
-  // 00:00 exactly = start of next calendar day
-  const effective = (hour === 0 && min === 0)
-    ? new Date(dt.getTime() + 86400000)
-    : dt;
   const pad = n => String(n).padStart(2,'0');
-  return effective.getFullYear() + '-' + pad(effective.getMonth()+1) + '-' + pad(effective.getDate());
+  return parts[2] + '-' + pad(parseInt(parts[0])) + '-' + pad(parseInt(parts[1]));
 }
 
 // Format date "06/11/2026 13:00" → "Jun 11 · 13:00"
@@ -1414,7 +1404,8 @@ function statusBadge(match) {
     return `<span class="time">● ${match.minute || 'LIVE'}</span>`;
   if (match.status === 'finished')
     return '';
-  // Check display correction for known wrong API dates
+  // Use display field if available, otherwise format from date
+  if (match.display) return `<span class="venue">${match.display}</span>`;
   const key = match.home && match.away ? match.home.name + '-' + match.away.name : '';
   const corrected = MATCH_DISPLAY_CORRECTIONS[key];
   return `<span class="venue">${corrected || fmtDate(match.date)}</span>`;
@@ -1475,7 +1466,9 @@ function buildTicker(matches) {
     // Format date for upcoming: "Jun 13 · 18:00"
     let timeLabel = '';
     const tickerKey = m.home && m.away ? m.home.name + '-' + m.away.name : '';
-    if (MATCH_DISPLAY_CORRECTIONS[tickerKey]) {
+    if (m.display) {
+      timeLabel = m.display;
+    } else if (MATCH_DISPLAY_CORRECTIONS[tickerKey]) {
       timeLabel = MATCH_DISPLAY_CORRECTIONS[tickerKey];
     } else if (m.date) {
       const parts = m.date.split(' '); // ["06/13/2026", "18:00"]
@@ -1972,18 +1965,12 @@ function scheduleRefresh() {
           updateStatsOnly(data.matches);
           buildTicker(data.matches);
         }
-        // Update groups directly from fixtures — no extra API call needed
+        // Update groups via API (has BASE_GROUPS with all 12)
         const groupsVisible = document.getElementById('view-grupos').classList.contains('active');
         if (groupsVisible) {
-          const calcGroups = calcStandingsFromFixtures(data.matches);
-          if (Object.keys(calcGroups).length > 0) {
-            // Build group list directly from calc without API
-            const groupList = Object.entries(calcGroups).map(([name, teams]) => ({
-              name,
-              teams: Object.values(teams).sort((a,b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
-            })).sort((a,b) => a.name.localeCompare(b.name));
-            if (groupList.length > 0) renderGroups(groupList);
-          }
+          fetch(`${API}?action=groups`).then(r=>r.json()).then(gd=>{
+            if (gd.ok && gd.groups && gd.groups.length > 0) renderGroups(gd.groups);
+          }).catch(()=>{});
         }
       }
     } catch(e) {}
