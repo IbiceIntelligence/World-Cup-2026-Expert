@@ -704,10 +704,21 @@ async function getWorldCupNews(lang) {
 
   // WC articles first, then other football
   // Solo noticias del Mundial — sin otros torneos
-  const final = fresh.filter(a =>
-    /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial|seleccion nacional|seleccion/i.test(a.title) ||
-    a.tag === 'RESULT' || a.tag === 'INJURY' || a.tag === 'BAJA'
-  ).slice(0, 12);
+  const final = fresh.filter(a => {
+    const t = a.title || '';
+    return (
+      // Torneo
+      /world cup|mundial|fifa|wc2026|2026|copa del mundo|copa mundial|group stage|fase de grupos|jornada|matchday|eliminado|clasifica|avanza/i.test(t) ||
+      // Equipos participantes
+      /mexico|south africa|sudafrica|south korea|corea|czech republic|chequia|canada|bosnia|united states|estados unidos|paraguay|australia|turkey|turquia|qatar|switzerland|suiza|brazil|brasil|morocco|marruecos|haiti|scotland|escocia|germany|alemania|cura.ao|netherlands|paises bajos|holanda|japan|japon|sweden|suecia|tunisia|tunez|spain|españa|cape verde|cabo verde|belgium|belgica|egypt|egipto|saudi arabia|arabia saudita|uruguay|iran|new zealand|nueva zelanda|france|francia|senegal|iraq|irak|norway|noruega|argentina|algeria|argelia|austria|jordan|jordania|portugal|congo|england|inglaterra|croatia|croacia|ghana|panama|uzbekistan|colombia/i.test(t) ||
+      // Jugadores clave
+      /messi|mbappe|mbapp|yamal|vinicius|ronaldo|neymar|haaland|salah|mane|benzema|lewandowski|kane|modric|de bruyne|pedri|gavi|bellingham|saka|rashford|pulisic|reyna|mckennie|davies|david|larin|james rodriguez|falcao|cuadrado|chicharito|lozano|memo ochoa|osorio/i.test(t) ||
+      // Sedes
+      /metlife|azteca|sofi stadium|hard rock|at&t stadium|nrg stadium|lumen field|mercedes.benz|gillette|lincoln financial|arrowhead|bc place|bmo field|estadio akron|estadio bbva|levi.s stadium/i.test(t) ||
+      // Tags relevantes
+      a.tag === 'RESULT' || a.tag === 'INJURY' || a.tag === 'BAJA'
+    );
+  }).slice(0, 12);
 
   if (final.length > 0) {
     return { ok: true, source: 'rss', articles: final };
