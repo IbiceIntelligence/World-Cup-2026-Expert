@@ -1924,15 +1924,7 @@ async function loadLiveData() {
     const res = await fetch(`${API}?action=news&lang=${currentLang}`);
     const data = await res.json();
     if (data.ok && data.articles && data.articles.length) {
-      // Only replace static news if at least 2 articles are non-PREVIEW (RESULT, INJURY, ODDS, BAJA)
-      const qualityArticles = data.articles.filter(a => {
-        const tag = (a.tag || '').toUpperCase();
-        return tag === 'RESULT' || tag === 'INJURY' || tag === 'ODDS' || tag === 'BAJA';
-      });
-      if (qualityArticles.length >= 2) {
-        renderNews(data.articles);
-      }
-      // If fewer than 2 quality articles, keep the static HTML news intact
+      renderNews(data.articles);
     } else {
       // RSS unavailable — show "no news" message honestly
       const noNewsMsg = currentLang === 'en'
@@ -2157,6 +2149,54 @@ function openDrawerFromCard(el) {
 let _analysisToken = 0;
 
 function openDrawer(home, away) {
+  // ── FREE TIER: 1 analysis allowed, then paywall ──
+  const analysisCount = parseInt(localStorage.getItem('wc26_analysis_count') || '0');
+  const FREE_LIMIT = 1;
+
+  if (analysisCount >= FREE_LIMIT) {
+    // Show paywall drawer
+    _analysisToken++;
+    const overlay = document.getElementById('drawerOverlay');
+    const drawer  = document.getElementById('matchDrawer');
+    document.getElementById('drawerHome').textContent = `${flag(home)} ${home}`;
+    document.getElementById('drawerAway').textContent = `${flag(away)} ${away}`;
+    document.getElementById('drawerBody').innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;text-align:center;gap:16px">
+        <div style="font-size:36px">🔒</div>
+        <div style="font-size:18px;font-weight:700;color:var(--text)">
+          ${currentLang==='en' ? 'Premium Analysis' : 'Análisis Premium'}
+        </div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6;max-width:280px">
+          ${currentLang==='en'
+            ? 'You\'ve used your 1 free analysis. Upgrade to Premium for unlimited AI match analysis, injuries, odds, and more.'
+            : 'Usaste tu análisis gratuito. Hazte Premium para análisis AI ilimitados, bajas, cuotas y más.'}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:280px;margin-top:8px">
+          <button onclick="showView('premium',null);closeDrawer()"
+            style="background:var(--gold);color:#0a0a0a;border:none;padding:14px;border-radius:8px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:14px;font-weight:700;width:100%">
+            ${currentLang==='en' ? '⚡ Upgrade to Premium — $9/mo' : '⚡ Hazte Premium — $9/mes'}
+          </button>
+          <button onclick="showView('premium',null);closeDrawer()"
+            style="background:transparent;color:var(--gold);border:1px solid var(--border2);padding:12px;border-radius:8px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:13px;font-weight:600;width:100%">
+            ${currentLang==='en' ? '🏆 Go Pro — $29/mo' : '🏆 Hazte Pro — $29/mes'}
+          </button>
+        </div>
+        <div style="font-size:10px;color:var(--text3)">
+          ${currentLang==='en' ? '🔒 Secure payment via Stripe' : '🔒 Pago seguro vía Stripe'}
+        </div>
+      </div>`;
+    drawer.classList.remove('open');
+    overlay.classList.remove('open');
+    void drawer.offsetWidth;
+    overlay.classList.add('open');
+    drawer.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    return;
+  }
+
+  // ── Free analysis allowed — increment counter ──
+  localStorage.setItem('wc26_analysis_count', String(analysisCount + 1));
+
   // Cancel any in-flight analysis
   _analysisToken++;
   const myToken = _analysisToken;
