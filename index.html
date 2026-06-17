@@ -1924,7 +1924,15 @@ async function loadLiveData() {
     const res = await fetch(`${API}?action=news&lang=${currentLang}`);
     const data = await res.json();
     if (data.ok && data.articles && data.articles.length) {
-      renderNews(data.articles);
+      // Only replace static news if at least 2 articles are non-PREVIEW (RESULT, INJURY, ODDS, BAJA)
+      const qualityArticles = data.articles.filter(a => {
+        const tag = (a.tag || '').toUpperCase();
+        return tag === 'RESULT' || tag === 'INJURY' || tag === 'ODDS' || tag === 'BAJA';
+      });
+      if (qualityArticles.length >= 2) {
+        renderNews(data.articles);
+      }
+      // If fewer than 2 quality articles, keep the static HTML news intact
     } else {
       // RSS unavailable — show "no news" message honestly
       const noNewsMsg = currentLang === 'en'
