@@ -340,6 +340,32 @@ async function runApifyActor(actorId, inputData) {
 async function getMatchAnalysis(home, away, lang = 'es') {
   const isES = lang !== 'en';
 
+  // ── Layer 4: xG context from OpenFootball (free, no auth) ──────────────
+  let xgContext = 'No xG data available — use qualifying campaign averages as proxy.';
+  try {
+    const ofRes = await Promise.race([
+      fetchJSON('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'),
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+    ]);
+    if (ofRes && ofRes.rounds) {
+      const allMatches = ofRes.rounds.flatMap(r => r.matches || []);
+      const ofMatch = allMatches.find(m => {
+        const h = (m.team1?.name || m.team1 || '').toLowerCase();
+        const a = (m.team2?.name || m.team2 || '').toLowerCase();
+        return h.includes(home.toLowerCase().slice(0,4)) && a.includes(away.toLowerCase().slice(0,4));
+      });
+      if (ofMatch) {
+        const score1 = ofMatch.score?.ft?.[0] ?? ofMatch.score1 ?? null;
+        const score2 = ofMatch.score?.ft?.[1] ?? ofMatch.score2 ?? null;
+        const goals1 = (ofMatch.goals1 || []).map(g => `${g.name} ${g.minute}'`).join(', ');
+        const goals2 = (ofMatch.goals2 || []).map(g => `${g.name} ${g.minute}'`).join(', ');
+        xgContext = `OpenFootball: ${home} ${score1 ?? '?'}-${score2 ?? '?'} ${away}`;
+        if (goals1) xgContext += ` | ${home} scorers: ${goals1}`;
+        if (goals2) xgContext += ` | ${away} scorers: ${goals2}`;
+      }
+    }
+  } catch(e) { /* OpenFootball unavailable — Claude uses internal xG knowledge */ }
+
   // ── Build context from trovevault live data (Layer 1) ───────────────────
   let match = null;
   let groupLetter = '';
@@ -604,6 +630,7 @@ MOVIMIENTO DE LÍNEAS: ${lineMovementContext}
 LESIONES/BAJAS: ${injuryContext}
 SQUADS CONFIRMADOS: ${squadContext}
 VALORES Y FORMA (Transfermarkt): ${transferContext}
+XG / DATOS REALES (OpenFootball): ${xgContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 NOTICIAS RECIENTES: ${newsContext}
 
@@ -618,6 +645,7 @@ LINE MOVEMENT: ${lineMovementContext}
 INJURIES/ABSENCES: ${injuryContext}
 CONFIRMED SQUADS: ${squadContext}
 MARKET VALUES & FORM (Transfermarkt): ${transferContext}
+XG / REAL MATCH DATA (OpenFootball): ${xgContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 RECENT NEWS: ${newsContext}
 
