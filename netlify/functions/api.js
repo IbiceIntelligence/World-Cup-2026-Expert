@@ -418,12 +418,21 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   let injuryContext = 'Check for any known injuries or absences for both teams.';
   let crowdContext = 'No Polymarket data available — use market consensus.';
   let newsContext = 'No recent news available.';
+  let lineMovementContext = 'No line movement data available — assess based on market knowledge.';
 
   if (APIFY_API_TOKEN) {
-    const [oddsRes, injuryRes, crowdRes, newsRes] = await Promise.allSettled([
-      // Layer 2: Live odds from scrapemint
+    const [oddsRes, lineRes, injuryRes, crowdRes, newsRes] = await Promise.allSettled([
+      // Layer 2a: Live odds from scrapemint
       Promise.race([
         runApifyActor('scrapemint/sports-odds-scraper', {
+          sport: 'soccer', league: 'FIFA World Cup 2026',
+          query: `${home} vs ${away}`, maxItems: 5,
+        }),
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+      ]),
+      // Layer 2b: Line movement — 40+ books, sharp money signals
+      Promise.race([
+        runApifyActor('scrapemint/sports-odds-movement-tracker', {
           sport: 'soccer', league: 'FIFA World Cup 2026',
           query: `${home} vs ${away}`, maxItems: 5,
         }),
@@ -457,6 +466,13 @@ async function getMatchAnalysis(home, away, lang = 'es') {
       oddsContext = oddsRes.value.slice(0,3).map(o =>
         `${o.bookmaker||o.source||'Book'}: ${home} ${o.home||o.homeOdds||'?'} | Draw ${o.draw||o.drawOdds||'?'} | ${away} ${o.away||o.awayOdds||'?'}`
       ).join(' | ');
+    }
+
+    // Process line movement
+    if (lineRes.status === 'fulfilled' && Array.isArray(lineRes.value) && lineRes.value.length) {
+      lineMovementContext = lineRes.value.slice(0,3).map(l =>
+        `${l.market||l.bet||'Market'}: ${l.opening||l.open||'?'} → ${l.current||l.close||'?'} (${l.movement||l.change||'?'}) ${l.sharp||l.steam ? '🔥 Sharp' : ''}`
+      ).filter(Boolean).join(' | ');
     }
 
     // Process injuries
@@ -554,6 +570,7 @@ ESTADO: ${matchStatus} | ${scoreCtx}
 SEDE: ${venue}
 TABLA GRUPO ${groupLetter}: ${standingsStr}
 ODDS EN MERCADO: ${oddsContext}
+MOVIMIENTO DE LÍNEAS: ${lineMovementContext}
 LESIONES/BAJAS: ${injuryContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 NOTICIAS RECIENTES: ${newsContext}
@@ -565,6 +582,7 @@ STATUS: ${matchStatus} | ${scoreCtx}
 VENUE: ${venue}
 GROUP ${groupLetter} TABLE: ${standingsStr}
 MARKET ODDS: ${oddsContext}
+LINE MOVEMENT: ${lineMovementContext}
 INJURIES/ABSENCES: ${injuryContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 RECENT NEWS: ${newsContext}
