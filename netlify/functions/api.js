@@ -131,68 +131,96 @@ let OFFICIAL_MATCHES = [
 ]
 
 async function getFixtures() {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  // Helper: convert UTC ISO string to ET date/display
-  function toET(matchDate) {
-    if (!matchDate) return null;
-    const utc = new Date(matchDate);
-    const et = new Date(utc.getTime() - 4 * 60 * 60 * 1000); // EDT = UTC-4
-    const mm = String(et.getUTCMonth() + 1).padStart(2, '0');
-    const dd = String(et.getUTCDate()).padStart(2, '0');
-    const hh = String(et.getUTCHours()).padStart(2, '0');
-    const min = String(et.getUTCMinutes()).padStart(2, '0');
+  function utcToET(iso) {
+    if (!iso) return null;
+    var utc = new Date(iso);
+    var et = new Date(utc.getTime() - 4 * 3600000);
+    var mo = String(et.getUTCMonth()+1).padStart(2,'0');
+    var dd = String(et.getUTCDate()).padStart(2,'0');
+    var hh = String(et.getUTCHours()).padStart(2,'0');
+    var mm = String(et.getUTCMinutes()).padStart(2,'0');
     return {
-      isoDate: et.getUTCFullYear() + '-' + mm + '-' + dd,
-      display: months[et.getUTCMonth()] + ' ' + et.getUTCDate() + ' · ' + hh + ':' + min + ' ET',
+      isoDate: et.getUTCFullYear() + '-' + mo + '-' + dd,
+      display: MO[et.getUTCMonth()] + ' ' + et.getUTCDate() + ' - ' + hh + ':' + mm + ' ET',
+      dateStr: mo + '/' + dd + '/' + et.getUTCFullYear() + ' ' + hh + ':' + mm,
     };
   }
 
-  // ── PRIMARY: trovevault as source of truth ─────────────────────────────
-  try {
-    if (APIFY_API_TOKEN) {
-      const liveData = await Promise.race([
+  // PRIMARY: trovevault as full source of truth
+  if (APIFY_API_TOKEN) {
+    try {
+      var liveData = await Promise.race([
         runApifyActor('trovevault/world-cup-results-tables', {
           year: '2026', stage: 'all', includeMatches: true,
           includeGroupTables: false, maxMatches: 104,
         }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 10000); })
       ]);
-
       if (Array.isArray(liveData) && liveData.length > 0) {
-        // Build matches entirely from trovevault — no hardcode dependency
-        const matches = liveData.map((live, i) => {
-          const homeName = live.homeTeam || live.home_team || live.team_home || 'TBD';
-          const awayName = live.awayTeam || live.away_team || live.team_away || 'TBD';
-          const hs = live.homeScore ?? live.home_score ?? null;
-          const as_ = live.awayScore ?? live.away_score ?? null;
-          const status = live.status || 'scheduled';
-          const groupRaw = live.group || live.groupName || '';
-          const group = groupRaw.replace('Group ', '').trim();
-          const et = toET(live.matchDate);
-          // Fallback display if matchDate missing
-          const display = et ? et.display : (live.localDate || live.date || '');
-          const isoDate = et ? et.isoDate : (live.localDate || '').slice(0, 10);
+        var matches = liveData.map(function(live, i) {
+          var homeName = live.homeTeam || live.home_team || live.team_home || 'TBD';
+          var awayName = live.awayTeam || live.away_team || live.team_away || 'TBD';
+          var hs = (live.homeScore != null) ? live.homeScore : ((live.home_score != null) ? live.home_score : null);
+          var as2 = (live.awayScore != null) ? live.awayScore : ((live.away_score != null) ? live.away_score : null);
+          var status = live.status || 'scheduled';
+          var groupRaw = live.group || live.groupName || '';
+          var group = groupRaw.replace('Group ', '').trim();
+          var et = utcToET(live.matchDate);
+          var isoDate = et ? et.isoDate : (live.localDate ? String(live.localDate).slice(0,10) : '');
+          var display = et ? et.display : (live.localDate || '');
+          var dateStr = et ? et.dateStr : '';
           return {
-            id: live.id || live.matchId || ('m' + String(i + 1).padStart(2, '0')),
-            isoDate,
+            id: live.id || live.matchId || ('m' + String(i+1).padStart(2,'0')),
+            isoDate: isoDate,
+            date: dateStr,
             home: { name: homeName },
             away: { name: awayName },
-            display,
-            group,
-            status,
+            display: display,
+            group: group,
+            status: status,
             homeScore: hs !== null ? parseInt(hs) : null,
-            awayScore: as_ !== null ? parseInt(as_) : null,
+            awayScore: as2 !== null ? parseInt(as2) : null,
             minute: live.minute || null,
             venue: live.venue || '',
           };
         });
-        return { ok: true, matches };
+        return { ok: true, matches: matches };
       }
-    }
-  } catch(e) { /* trovevault failed — fall through to hardcode */ }
+    } catch(e1) { /* fall through to hardcode enrichment */ }
 
-  // ── FALLBACK: OFFICIAL_MATCHES hardcode ───────────────────────────────
+    // FALLBACK: enrich hardcode with trovevault scores
+    try {
+      var enrichData = await Promise.race([
+        runApifyActor('trovevault/world-cup-results-tables', {
+          year: '2026', stage: 'all', includeMatches: true,
+          includeGroupTables: false, maxMatches: 104,
+        }),
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 8000); })
+      ]);
+      if (Array.isArray(enrichData) && enrichData.length > 0) {
+        enrichData.forEach(function(live) {
+          var homeName = live.homeTeam || live.home_team || '';
+          var awayName = live.awayTeam || live.away_team || '';
+          var match = OFFICIAL_MATCHES.find(function(m) {
+            return m.home.name === homeName && m.away.name === awayName;
+          });
+          if (match) {
+            if (live.homeScore != null) match.homeScore = parseInt(live.homeScore);
+            if (live.awayScore != null) match.awayScore = parseInt(live.awayScore);
+            if (live.status === 'finished') match.status = 'finished';
+            else if (live.status === 'live') { match.status = 'live'; match.minute = live.minute || null; }
+            if (live.matchDate) {
+              var et = utcToET(live.matchDate);
+              if (et) { match.isoDate = et.isoDate; match.display = et.display; match.date = et.dateStr; }
+            }
+          }
+        });
+      }
+    } catch(e2) { /* enrichment failed */ }
+  }
+
   return { ok: true, matches: OFFICIAL_MATCHES };
 }
 
@@ -288,115 +316,67 @@ async function runApifyActor(actorId, inputData) {
 async function getMatchAnalysis(home, away, lang = 'es') {
   const isES = lang !== 'en';
 
-  // ── Layer 4: xG context from OpenFootball (free, no auth) ──────────────
-  let xgContext = 'No xG data available — use qualifying campaign averages as proxy.';
-  try {
-    const ofRes = await Promise.race([
-      fetchJSON('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
-    ]);
-    if (ofRes && ofRes.rounds) {
-      const allMatches = ofRes.rounds.flatMap(r => r.matches || []);
-      const ofMatch = allMatches.find(m => {
-        const h = (m.team1?.name || m.team1 || '').toLowerCase();
-        const a = (m.team2?.name || m.team2 || '').toLowerCase();
-        return h.includes(home.toLowerCase().slice(0,4)) && a.includes(away.toLowerCase().slice(0,4));
-      });
-      if (ofMatch) {
-        const score1 = ofMatch.score?.ft?.[0] ?? ofMatch.score1 ?? null;
-        const score2 = ofMatch.score?.ft?.[1] ?? ofMatch.score2 ?? null;
-        const goals1 = (ofMatch.goals1 || []).map(g => `${g.name} ${g.minute}'`).join(', ');
-        const goals2 = (ofMatch.goals2 || []).map(g => `${g.name} ${g.minute}'`).join(', ');
-        xgContext = `OpenFootball: ${home} ${score1 ?? '?'}-${score2 ?? '?'} ${away}`;
-        if (goals1) xgContext += ` | ${home} scorers: ${goals1}`;
-        if (goals2) xgContext += ` | ${away} scorers: ${goals2}`;
+  // ── Build context from our live data ─────────────────────────────────────
+  // 1. Find the match in OFFICIAL_MATCHES
+  const match = OFFICIAL_MATCHES.find(m =>
+    m.home.name === home && m.away.name === away
+  );
+
+  // 2. Build group standings context
+  const groupLetter = match?.group || '';
+  const groupTeams = groupLetter ? Object.entries({
+    A: ['Mexico','South Korea','Czech Republic','South Africa'],
+    B: ['Canada','Switzerland','Qatar','Bosnia and Herzegovina'],
+    C: ['Brazil','Scotland','Morocco','Haiti'],
+    D: ['United States','Australia','Turkey','Paraguay'],
+    E: ['Germany','Ivory Coast','Ecuador','Curaçao'],
+    F: ['Netherlands','Japan','Sweden','Tunisia'],
+    G: ['Belgium','Iran','New Zealand','Egypt'],
+    H: ['Spain','Uruguay','Saudi Arabia','Cape Verde'],
+    I: ['France','Norway','Senegal','Iraq'],
+    J: ['Argentina','Austria','Algeria','Jordan'],
+    K: ['Portugal','Colombia','Uzbekistan','Democratic Republic of the Congo'],
+    L: ['England','Croatia','Ghana','Panama'],
+  }[groupLetter] || []) : [];
+
+  // 3. Calculate current group standings from OFFICIAL_MATCHES
+  const groupStandings = {};
+  groupTeams.forEach(t => { groupStandings[t] = {p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0}; });
+  OFFICIAL_MATCHES.filter(m => m.group === groupLetter && (m.status==='finished'||m.status==='live'))
+    .forEach(m => {
+      const hs = parseInt(m.homeScore)||0, as = parseInt(m.awayScore)||0;
+      if (groupStandings[m.home.name]) {
+        groupStandings[m.home.name].p++;
+        groupStandings[m.home.name].gf += hs;
+        groupStandings[m.home.name].ga += as;
+        if (hs>as) { groupStandings[m.home.name].w++; groupStandings[m.home.name].pts+=3; }
+        else if (hs===as) { groupStandings[m.home.name].d++; groupStandings[m.home.name].pts+=1; }
+        else groupStandings[m.home.name].l++;
       }
-    }
-  } catch(e) { /* OpenFootball unavailable — Claude uses internal xG knowledge */ }
-
-  // ── Build context from trovevault live data (Layer 1) ───────────────────
-  let match = null;
-  let groupLetter = '';
-  let standingsStr = 'Group standings not available.';
-  let matchVenue = 'World Cup 2026 venue';
-
-  try {
-    if (APIFY_API_TOKEN) {
-      const liveFixtures = await Promise.race([
-        runApifyActor('trovevault/world-cup-results-tables', {
-          year: '2026', stage: 'all', includeMatches: true,
-          includeGroupTables: true, maxMatches: 104,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
-      ]);
-
-      if (Array.isArray(liveFixtures) && liveFixtures.length > 0) {
-        // Find this specific match
-        const liveMatch = liveFixtures.find(m =>
-          (m.homeTeam === home || m.home_team === home) &&
-          (m.awayTeam === away || m.away_team === away)
-        );
-        if (liveMatch) {
-          groupLetter = (liveMatch.group || '').replace('Group ', '');
-          matchVenue = liveMatch.venue || matchVenue;
-          match = {
-            status: liveMatch.status || 'scheduled',
-            homeScore: liveMatch.homeScore ?? liveMatch.home_score ?? null,
-            awayScore: liveMatch.awayScore ?? liveMatch.away_score ?? null,
-            minute: liveMatch.minute || null,
-            group: groupLetter,
-            venue: matchVenue,
-            display: liveMatch.localDate || liveMatch.matchDate || '',
-          };
-        }
-
-        // Build live group standings from trovevault data
-        const groupMatches = liveFixtures.filter(m =>
-          (m.group || '').replace('Group ', '') === groupLetter &&
-          (m.status === 'finished' || m.status === 'live')
-        );
-        const gs = {};
-        groupMatches.forEach(m => {
-          const h = m.homeTeam || m.home_team || '';
-          const a = m.awayTeam || m.away_team || '';
-          if (!gs[h]) gs[h] = {p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
-          if (!gs[a]) gs[a] = {p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
-          const hs = parseInt(m.homeScore||m.home_score)||0;
-          const as = parseInt(m.awayScore||m.away_score)||0;
-          gs[h].p++; gs[h].gf+=hs; gs[h].ga+=as;
-          gs[a].p++; gs[a].gf+=as; gs[a].ga+=hs;
-          if (hs>as) { gs[h].w++; gs[h].pts+=3; gs[a].l++; }
-          else if (hs<as) { gs[a].w++; gs[a].pts+=3; gs[h].l++; }
-          else { gs[h].d++; gs[h].pts+=1; gs[a].d++; gs[a].pts+=1; }
-        });
-        if (Object.keys(gs).length > 0) {
-          standingsStr = Object.entries(gs)
-            .sort((a,b) => b[1].pts-a[1].pts || (b[1].gf-b[1].ga)-(a[1].gf-a[1].ga))
-            .map(([t,s]) => `${t}: ${s.pts}pts ${s.p}PJ ${s.w}W ${s.d}D ${s.l}L ${s.gf}-${s.ga}`)
-            .join(' | ');
-        }
+      if (groupStandings[m.away.name]) {
+        groupStandings[m.away.name].p++;
+        groupStandings[m.away.name].gf += as;
+        groupStandings[m.away.name].ga += hs;
+        if (as>hs) { groupStandings[m.away.name].w++; groupStandings[m.away.name].pts+=3; }
+        else if (as===hs) { groupStandings[m.away.name].d++; groupStandings[m.away.name].pts+=1; }
+        else groupStandings[m.away.name].l++;
       }
-    }
-  } catch(e) {
-    // trovevault failed — fall back to OFFICIAL_MATCHES
-    const fallback = OFFICIAL_MATCHES.find(m => m.home.name === home && m.away.name === away);
-    if (fallback) {
-      match = fallback;
-      groupLetter = fallback.group || '';
-      matchVenue = fallback.venue || matchVenue;
-    }
-  }
+    });
+
+  const standingsStr = Object.entries(groupStandings)
+    .sort((a,b) => b[1].pts - a[1].pts)
+    .map(([t,s]) => `${t}: ${s.pts}pts ${s.p}PJ ${s.w}W ${s.d}D ${s.l}L ${s.gf}-${s.ga}`)
+    .join(' | ');
 
   // 4. Fetch real data from Apify actors (parallel, with timeouts)
   let oddsContext = 'Use your knowledge of current WC2026 market odds. Apply implied probability calculation.';
   let injuryContext = 'Check for any known injuries or absences for both teams.';
   let crowdContext = 'No Polymarket data available — use market consensus.';
   let newsContext = 'No recent news available.';
-  let lineMovementContext = 'No line movement data available — assess based on market knowledge.';
 
   if (APIFY_API_TOKEN) {
-    const [oddsRes, lineRes, injuryRes, squadRes, transferRes, crowdRes, newsRes] = await Promise.allSettled([
-      // Layer 2a: Live odds from scrapemint
+    const [oddsRes, injuryRes, crowdRes, newsRes] = await Promise.allSettled([
+      // Layer 2: Live odds from scrapemint
       Promise.race([
         runApifyActor('scrapemint/sports-odds-scraper', {
           sport: 'soccer', league: 'FIFA World Cup 2026',
@@ -404,32 +384,10 @@ async function getMatchAnalysis(home, away, lang = 'es') {
         }),
         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
       ]),
-      // Layer 2b: Line movement — 40+ books, sharp money signals
-      Promise.race([
-        runApifyActor('scrapemint/sports-odds-movement-tracker', {
-          sport: 'soccer', league: 'FIFA World Cup 2026',
-          query: `${home} vs ${away}`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
-      ]),
-      // Layer 3a: Injuries from ESPN
+      // Layer 3: Injuries from ESPN
       Promise.race([
         runApifyActor('crawlerbros/espn-news', {
           query: `${home} ${away} injury lineup World Cup 2026`, maxItems: 3,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
-      ]),
-      // Layer 3b: Confirmed squads and player stats
-      Promise.race([
-        runApifyActor('crawlerbros/espn-rosters-player-stats', {
-          query: `${home} ${away} World Cup 2026`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
-      ]),
-      // Layer 3c: Squad market values and form from Transfermarkt
-      Promise.race([
-        runApifyActor('automation-lab/transfermarkt-scraper', {
-          query: `${home} ${away} World Cup 2026`, maxItems: 5,
         }),
         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
       ]),
@@ -456,32 +414,9 @@ async function getMatchAnalysis(home, away, lang = 'es') {
       ).join(' | ');
     }
 
-    // Process line movement
-    if (lineRes.status === 'fulfilled' && Array.isArray(lineRes.value) && lineRes.value.length) {
-      lineMovementContext = lineRes.value.slice(0,3).map(l =>
-        `${l.market||l.bet||'Market'}: ${l.opening||l.open||'?'} → ${l.current||l.close||'?'} (${l.movement||l.change||'?'}) ${l.sharp||l.steam ? '🔥 Sharp' : ''}`
-      ).filter(Boolean).join(' | ');
-    }
-
     // Process injuries
     if (injuryRes.status === 'fulfilled' && Array.isArray(injuryRes.value) && injuryRes.value.length) {
       injuryContext = injuryRes.value.slice(0,3).map(n => n.title || n.headline || '').filter(Boolean).join(' | ');
-    }
-
-    // Process squads
-    let squadContext = 'No confirmed squad data available.';
-    if (squadRes.status === 'fulfilled' && Array.isArray(squadRes.value) && squadRes.value.length) {
-      squadContext = squadRes.value.slice(0,5).map(p =>
-        `${p.name||p.player||'?'} (${p.team||'?'}): ${p.position||'?'} ${p.goals ? p.goals+'g' : ''} ${p.assists ? p.assists+'a' : ''}`.trim()
-      ).filter(Boolean).join(' | ');
-    }
-
-    // Process Transfermarkt
-    let transferContext = 'No Transfermarkt data available.';
-    if (transferRes.status === 'fulfilled' && Array.isArray(transferRes.value) && transferRes.value.length) {
-      transferContext = transferRes.value.slice(0,4).map(p =>
-        `${p.name||p.player||'?'} (${p.marketValue||p.value||'?'}): ${p.form||p.recentForm||'?'}`
-      ).filter(Boolean).join(' | ');
     }
 
     // Process Polymarket
@@ -501,71 +436,35 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   const matchStatus = match ? `${match.status}${match.status==='live' ? ' ('+match.minute+"')" : ''}` : 'scheduled';
   const scoreCtx = (match?.status==='finished'||match?.status==='live')
     ? `Current score: ${match.homeScore}-${match.awayScore}` : 'Not started';
-  const venue = matchVenue || match?.venue || 'World Cup 2026 venue';
+  const venue = match?.venue || 'World Cup 2026 venue';
   const stage = `Group ${groupLetter} — FIFA World Cup 2026`;
 
-  // ── System prompt — full worldcup-betting-expert skill ────────────────────
-  const SKILL_CONTENT = `You are an expert football analyst and sports betting researcher specializing in the 2026 FIFA World Cup. You have access to live fixture data, multi-book odds, squad intelligence, xG stats, injury reports, and crowd wisdom from prediction markets. Your goal: deliver structured match previews with clear, data-backed betting recommendations.
-
-DISCLAIMER always required: End every report with: "Sports betting involves financial risk. This analysis is for informational and entertainment purposes only and does not constitute financial advice. Bet responsibly and only what you can afford to lose. Check local laws — sports betting is not legal everywhere."
-
-TOURNAMENT CONTEXT: FIFA World Cup 2026
-- Dates: June 11 - July 19, 2026
-- Host cities: 11 in USA, 3 in Mexico, 2 in Canada
-- Format: 48 teams, 12 groups of 4 — top 2 + 8 best 3rd-place — Round of 32 — R16 — QF — SF — Final
-- Total matches: 104
-
-BETTING ANALYSIS FRAMEWORK:
-
-1. VALUE BET DETECTION
-Implied probability = 1 / decimal odds
-Edge = Your probability - Implied probability
-Positive edge (+5%+) = value bet worth considering
-Flag value bets with 💎 | Flag risk with ⚠️ | Flag sharp line move with 🔥
-
-2. xG MODEL FOR MATCH PREDICTION
-Use xG from recent qualifying matches / form games:
-- Team A avg xG last 5 games vs Team B avg xGA allowed
-- Combine to estimate expected goals in this match
-- Compare to bookmaker over/under line
-
-3. HEAD-TO-HEAD & FORM
-- Last 5 H2H results (wins/draws/losses, goals)
-- Last 5 matches each team (W/D/L, goals for/against)
-- Tournament-specific form (WC group stage pressure)
-
-4. ASIAN HANDICAP VALUE (for uneven matchups)
-- When a team is -1.5 favorite, calculate if their xG dominance justifies it
-- AH covers the push — better value than 1X2 for strong favorites
-
-5. LINE MOVEMENT SIGNAL
-- Odds shortening fast = sharp money betting that side
-- Big move with no news = informed early betting signal
-- Late steam (within 2h of kickoff) = most reliable sharp signal
-
-6. CROWD WISDOM
-- Use Polymarket implied probabilities as reference
-- Compare crowd vs bookmaker for divergence signals
-
-REPORT FORMAT — Every match preview must include:
-1. Match Info — date, venue, tournament stage, current group standing
-2. Odds Board — best prices across books for all main markets (1X2, Over/Under, Asian Handicap)
-3. Team Analysis — squad strength, form, key players, injuries/absences
-4. Advanced Stats — xG averages, H2H record, possession tendencies
-5. Line Movement — any sharp money signals detected
-6. Crowd Wisdom — Polymarket implied probabilities
-7. News & Intangibles — weather, travel, motivation, manager tactics
-8. Betting Recommendations — 2-3 specific bets with full analysis
-
-FORMATTING RULES:
-- Open every report with ⚡ Quick Pick (2-3 bullets, the bets in plain English)
-- Odds always shown in both American (+150) and decimal (2.50) formats
-- For Spanish: respond in Spanish but keep betting terms in English with brief note on first use
-- End with mandatory disclaimer`;
-
+  // ── System prompt with full skill framework ───────────────────────────────
   const system = isES
-    ? SKILL_CONTENT + `\n\nResponde en ESPAÑOL. Responde SOLO con JSON válido — sin markdown, sin texto extra:\n{"summary":"⚡ Pick Rápido: [picks en 2-3 bullets]. ⚠️ Solo fines informativos.","picks":[{"market":"string","recommendation":"string 💎 o 🔥 si aplica","odds":"decimal","odds_american":"string","ev":número,"confidence":número}],"keyFactors":["factor con dato concreto"],"xgAnalysis":"xG estimado ambos equipos y comparación con línea O/U","lineMovement":"señal sharp money o N/A","crowdWisdom":"probabilidad Polymarket vs casas","teamAnalysis":{"home":"forma, bajas, táctica","away":"forma, bajas, táctica"},"prediction":{"score":"X-Y","note":"razón en 1 oración"},"disclaimer":"string"}`
-    : SKILL_CONTENT + `\n\nRespond in ENGLISH. Reply ONLY with valid JSON — no markdown, no extra text:\n{"summary":"⚡ Quick Pick: [picks in 2-3 bullets]. ⚠️ For informational purposes only.","picks":[{"market":"string","recommendation":"string 💎 or 🔥 if applies","odds":"decimal","odds_american":"string","ev":number,"confidence":number}],"keyFactors":["factor with concrete data"],"xgAnalysis":"estimated xG both teams and O/U comparison","lineMovement":"sharp money signal or N/A","crowdWisdom":"Polymarket probability vs books","teamAnalysis":{"home":"form, absences, tactics","away":"form, absences, tactics"},"prediction":{"score":"X-Y","note":"reason in 1 sentence"},"disclaimer":"string"}`;
+    ? `Eres el worldcup-betting-expert de IBICE Intelligence para FIFA World Cup 2026.
+
+FRAMEWORK ANÁLISIS (worldcup-betting-expert skill):
+1. VALUE BET: Prob implícita = 1/cuota decimal. Edge = Tu prob − Prob implícita. 💎 si Edge +5%+
+2. MODELO xG: Usa promedios de clasificación. Compara con línea Over/Under del mercado.
+3. H2H Y FORMA: Últimos 5 H2H + últimos 5 partidos cada equipo. Presión fase de grupos.
+4. HÁNDICAP ASIÁTICO: Si el favorito domina en xG, evalúa si justifica el hándicap.
+5. MOVIMIENTO DE LÍNEA: Cuotas bajando = dinero sharp. Steam tardío = señal más confiable. 🔥
+6. CROWD WISDOM: Probabilidades implícitas del mercado como referencia.
+
+RESPONDE SOLO JSON VÁLIDO — sin markdown, sin texto extra:
+{"summary":"⚡ Pick Rápido: [la mejor apuesta en 1 línea]. [1 oración de análisis]. ⚠️ Solo fines informativos.","picks":[{"market":"string","recommendation":"string 💎 o 🔥 si aplica","odds":"decimal","odds_american":"string","ev":número,"confidence":número}],"keyFactors":["factor con dato concreto x3"],"xgAnalysis":"xG estimado ambos equipos y comparación con línea O/U","lineMovement":"señal sharp money o N/A","prediction":{"score":"X-Y","note":"razón en 1 oración"}}`
+    : `You are the worldcup-betting-expert for IBICE Intelligence, FIFA World Cup 2026.
+
+ANALYSIS FRAMEWORK (worldcup-betting-expert skill):
+1. VALUE BET: Implied prob = 1/decimal odds. Edge = Your prob − Implied prob. 💎 if Edge +5%+
+2. xG MODEL: Use qualifying campaign averages. Compare to bookmaker Over/Under line.
+3. H2H & FORM: Last 5 H2H + last 5 each team. Group stage tournament pressure.
+4. ASIAN HANDICAP: If favorite dominates xG, evaluate if handicap line has value.
+5. LINE MOVEMENT: Odds shortening fast = sharp money. Late steam = most reliable signal. 🔥
+6. CROWD WISDOM: Market-implied probabilities as reference.
+
+REPLY ONLY VALID JSON — no markdown, no extra text:
+{"summary":"⚡ Quick Pick: [best bet in 1 line]. [1 sentence analysis]. ⚠️ For informational purposes only.","picks":[{"market":"string","recommendation":"string 💎 or 🔥 if applies","odds":"decimal","odds_american":"string","ev":number,"confidence":number}],"keyFactors":["factor with concrete data x3"],"xgAnalysis":"estimated xG both teams and O/U comparison","lineMovement":"sharp money signal or N/A","prediction":{"score":"X-Y","note":"reason in 1 sentence"}}`;
 
   const user = isES
     ? `PARTIDO: ${home} vs ${away}
@@ -574,11 +473,7 @@ ESTADO: ${matchStatus} | ${scoreCtx}
 SEDE: ${venue}
 TABLA GRUPO ${groupLetter}: ${standingsStr}
 ODDS EN MERCADO: ${oddsContext}
-MOVIMIENTO DE LÍNEAS: ${lineMovementContext}
 LESIONES/BAJAS: ${injuryContext}
-SQUADS CONFIRMADOS: ${squadContext}
-VALORES Y FORMA (Transfermarkt): ${transferContext}
-XG / DATOS REALES (OpenFootball): ${xgContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 NOTICIAS RECIENTES: ${newsContext}
 
@@ -589,11 +484,7 @@ STATUS: ${matchStatus} | ${scoreCtx}
 VENUE: ${venue}
 GROUP ${groupLetter} TABLE: ${standingsStr}
 MARKET ODDS: ${oddsContext}
-LINE MOVEMENT: ${lineMovementContext}
 INJURIES/ABSENCES: ${injuryContext}
-CONFIRMED SQUADS: ${squadContext}
-MARKET VALUES & FORM (Transfermarkt): ${transferContext}
-XG / REAL MATCH DATA (OpenFootball): ${xgContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 RECENT NEWS: ${newsContext}
 
