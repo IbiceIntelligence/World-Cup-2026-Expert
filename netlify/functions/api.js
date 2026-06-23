@@ -421,7 +421,7 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   let lineMovementContext = 'No line movement data available — assess based on market knowledge.';
 
   if (APIFY_API_TOKEN) {
-    const [oddsRes, lineRes, injuryRes, crowdRes, newsRes] = await Promise.allSettled([
+    const [oddsRes, lineRes, injuryRes, squadRes, transferRes, crowdRes, newsRes] = await Promise.allSettled([
       // Layer 2a: Live odds from scrapemint
       Promise.race([
         runApifyActor('scrapemint/sports-odds-scraper', {
@@ -438,10 +438,24 @@ async function getMatchAnalysis(home, away, lang = 'es') {
         }),
         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
       ]),
-      // Layer 3: Injuries from ESPN
+      // Layer 3a: Injuries from ESPN
       Promise.race([
         runApifyActor('crawlerbros/espn-news', {
           query: `${home} ${away} injury lineup World Cup 2026`, maxItems: 3,
+        }),
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+      ]),
+      // Layer 3b: Confirmed squads and player stats
+      Promise.race([
+        runApifyActor('crawlerbros/espn-rosters-player-stats', {
+          query: `${home} ${away} World Cup 2026`, maxItems: 5,
+        }),
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+      ]),
+      // Layer 3c: Squad market values and form from Transfermarkt
+      Promise.race([
+        runApifyActor('automation-lab/transfermarkt-scraper', {
+          query: `${home} ${away} World Cup 2026`, maxItems: 5,
         }),
         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
       ]),
@@ -478,6 +492,22 @@ async function getMatchAnalysis(home, away, lang = 'es') {
     // Process injuries
     if (injuryRes.status === 'fulfilled' && Array.isArray(injuryRes.value) && injuryRes.value.length) {
       injuryContext = injuryRes.value.slice(0,3).map(n => n.title || n.headline || '').filter(Boolean).join(' | ');
+    }
+
+    // Process squads
+    let squadContext = 'No confirmed squad data available.';
+    if (squadRes.status === 'fulfilled' && Array.isArray(squadRes.value) && squadRes.value.length) {
+      squadContext = squadRes.value.slice(0,5).map(p =>
+        `${p.name||p.player||'?'} (${p.team||'?'}): ${p.position||'?'} ${p.goals ? p.goals+'g' : ''} ${p.assists ? p.assists+'a' : ''}`.trim()
+      ).filter(Boolean).join(' | ');
+    }
+
+    // Process Transfermarkt
+    let transferContext = 'No Transfermarkt data available.';
+    if (transferRes.status === 'fulfilled' && Array.isArray(transferRes.value) && transferRes.value.length) {
+      transferContext = transferRes.value.slice(0,4).map(p =>
+        `${p.name||p.player||'?'} (${p.marketValue||p.value||'?'}): ${p.form||p.recentForm||'?'}`
+      ).filter(Boolean).join(' | ');
     }
 
     // Process Polymarket
@@ -572,6 +602,8 @@ TABLA GRUPO ${groupLetter}: ${standingsStr}
 ODDS EN MERCADO: ${oddsContext}
 MOVIMIENTO DE LÍNEAS: ${lineMovementContext}
 LESIONES/BAJAS: ${injuryContext}
+SQUADS CONFIRMADOS: ${squadContext}
+VALORES Y FORMA (Transfermarkt): ${transferContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 NOTICIAS RECIENTES: ${newsContext}
 
@@ -584,6 +616,8 @@ GROUP ${groupLetter} TABLE: ${standingsStr}
 MARKET ODDS: ${oddsContext}
 LINE MOVEMENT: ${lineMovementContext}
 INJURIES/ABSENCES: ${injuryContext}
+CONFIRMED SQUADS: ${squadContext}
+MARKET VALUES & FORM (Transfermarkt): ${transferContext}
 CROWD WISDOM (Polymarket): ${crowdContext}
 RECENT NEWS: ${newsContext}
 
