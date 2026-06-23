@@ -134,7 +134,7 @@ let OFFICIAL_MATCHES = [
   { id:'m43', isoDate:'2026-06-22', home:{name:'France'},        away:{name:'Iraq'},                      date:'06/22/2026 20:00', display:'Jun 22 · 20:00 ET', group:'I', status:'scheduled', homeScore:null, awayScore:null },
   { id:'m44', isoDate:'2026-06-22', home:{name:'Norway'},        away:{name:'Senegal'},                   date:'06/22/2026 23:00', display:'Jun 22 · 23:00 ET', group:'I', status:'scheduled', homeScore:null, awayScore:null },
   // ── JUN 23 ──
-  { id:'m45', isoDate:'2026-06-23', home:{name:'Portugal'},      away:{name:'Uzbekistan'},                date:'06/23/2026 13:00', display:'Jun 23 · 13:00 ET', group:'K', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m45', isoDate:'2026-06-23', home:{name:'Portugal'},      away:{name:'Uzbekistan'},                date:'06/23/2026 13:00', display:'Jun 23 · 13:00 ET', group:'K', status:'finished', homeScore:5,  awayScore:0 },
   { id:'m46', isoDate:'2026-06-23', home:{name:'England'},       away:{name:'Ghana'},                     date:'06/23/2026 16:00', display:'Jun 23 · 16:00 ET', group:'L', status:'scheduled', homeScore:null, awayScore:null },
   { id:'m47', isoDate:'2026-06-23', home:{name:'Panama'},        away:{name:'Croatia'},                   date:'06/23/2026 19:00', display:'Jun 23 · 19:00 ET', group:'L', status:'scheduled', homeScore:null, awayScore:null },
   { id:'m48', isoDate:'2026-06-23', home:{name:'Colombia'},      away:{name:'Democratic Republic of the Congo'}, date:'06/23/2026 22:00', display:'Jun 23 · 22:00 ET', group:'K', status:'scheduled', homeScore:null, awayScore:null },
@@ -169,107 +169,35 @@ let OFFICIAL_MATCHES = [
 ]
 
 async function getFixtures() {
-
-  // Live score enrichment via Apify RAG Web Browser
-  // apify/rag-web-browser acts as a proxy — bypasses 403s, returns in 3-5s
-  try {
-    if (APIFY_API_TOKEN) {
-      const ragResult = await Promise.race([
-        fetchJSON(
-          `https://rag-web-browser.apify.actor/search?query=world+cup+2026+live+scores+today+results&maxResults=1&outputFormats=text`,
-          { headers: { 'Authorization': `Bearer ${APIFY_API_TOKEN}` } }
-        ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 7000))
+  // Try trovevault first to enrich OFFICIAL_MATCHES with live scores
+  if (APIFY_API_TOKEN) {
+    try {
+      const liveData = await Promise.race([
+        runApifyActor('trovevault/world-cup-results-tables', {
+          year: '2026', stage: 'all', includeMatches: true,
+          includeGroupTables: false, maxMatches: 104,
+        }),
+        new Promise(function(_, reject) { setTimeout(function() { reject(new Error('timeout')); }, 10000); })
       ]);
-
-      // Parse scores from text using regex patterns
-      if (ragResult && (Array.isArray(ragResult) ? ragResult[0]?.text : ragResult?.text)) {
-        const text = Array.isArray(ragResult) ? ragResult[0].text : ragResult.text;
-
-        // Parse patterns like "Team A 2-1 Team B" or "Team A vs Team B 2 - 1"
-        OFFICIAL_MATCHES.forEach(m => {
-          if (m.status === 'finished') return; // skip already finished
-          const home = m.home.name;
-          const away = m.away.name;
-
-          // Look for score pattern near team names
-          const patterns = [
-            new RegExp(`${home}[\s\S]{0,30}?(\d+)[\s-]+(\d+)[\s\S]{0,30}?${away}`, 'i'),
-            new RegExp(`${away}[\s\S]{0,30}?(\d+)[\s-]+(\d+)[\s\S]{0,30}?${home}`, 'i'),
-            new RegExp(`${home}\s+(\d+)-(\d+)\s+${away}`, 'i'),
-          ];
-
-          for (const pattern of patterns) {
-            const match = text.match(pattern);
-            if (match) {
-              m.homeScore = parseInt(match[1]);
-              m.awayScore = parseInt(match[2]);
-              // Determine if live or finished based on context
-              const nearText = text.substring(Math.max(0, text.indexOf(match[0])-100), text.indexOf(match[0])+200);
-              if (/full.?time|ft|final|finished|ended/i.test(nearText)) {
-                m.status = 'finished';
-              } else if (/live|'|min|half.?time|ht/i.test(nearText)) {
-                m.status = 'live';
-                const minMatch = nearText.match(/(\d+)['']/);
-                if (minMatch) m.minute = minMatch[1] + "'";
-              }
-              break;
+      if (Array.isArray(liveData) && liveData.length > 0) {
+        liveData.forEach(function(live) {
+          var homeName = live.homeTeam || live.home_team || live.team_home || '';
+          var awayName = live.awayTeam || live.away_team || live.team_away || '';
+          var match = OFFICIAL_MATCHES.find(function(m) {
+            return m.home.name === homeName && m.away.name === awayName;
+          });
+          if (match) {
+            if (live.homeScore != null) match.homeScore = parseInt(live.homeScore);
+            if (live.awayScore != null) match.awayScore = parseInt(live.awayScore);
+            if (live.status === 'finished') match.status = 'finished';
+            else if (live.status === 'live') {
+              match.status = 'live';
+              match.minute = live.minute || null;
             }
           }
         });
       }
-    }
-  } catch(e) {
-    // RAG browser failed — try Apify actors as fallback
-    try {
-      if (APIFY_API_TOKEN) {
-        const liveData = await Promise.race([
-          runApifyActor('trovevault/world-cup-results-tables', {
-            year: '2026', stage: 'group', includeMatches: true,
-            includeGroupTables: false, maxMatches: 104,
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-        ]);
-        if (Array.isArray(liveData) && liveData.length > 0) {
-          liveData.forEach(live => {
-            const homeName = live.homeTeam || live.home_team || live.team_home || '';
-            const awayName = live.awayTeam || live.away_team || live.team_away || '';
-            const match = OFFICIAL_MATCHES.find(m => m.home.name === homeName && m.away.name === awayName);
-            if (match) {
-              const hs = live.homeScore ?? live.home_score ?? null;
-              const as = live.awayScore ?? live.away_score ?? null;
-              if (hs !== null) match.homeScore = parseInt(hs);
-              if (as !== null) match.awayScore = parseInt(as);
-              if (live.status === 'finished') match.status = 'finished';
-              else if (live.status === 'live') { match.status = 'live'; match.minute = live.minute || null; }
-            }
-          });
-        }
-      }
-    } catch(e2) {
-      // Try kindly_bolt as final fallback
-      try {
-        if (APIFY_API_TOKEN) {
-          const items2 = await Promise.race([
-            runApifyActor('kindly_bolt/wc2026-actors', { include_results: true, language: 'en' }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
-          ]);
-          if (Array.isArray(items2) && items2.length > 0) {
-            items2.forEach(live => {
-              const match = OFFICIAL_MATCHES.find(m =>
-                m.home.name === (live.team_home || live.homeTeam || '') &&
-                m.away.name === (live.team_away || live.awayTeam || '')
-              );
-              if (match && (live.status === 'finished' || live.status === 'live')) {
-                if (live.score_home != null) match.homeScore = parseInt(live.score_home);
-                if (live.score_away != null) match.awayScore = parseInt(live.score_away);
-                match.status = live.status;
-              }
-            });
-          }
-        }
-      } catch(e3) { /* all sources failed — use official schedule */ }
-    }
+    } catch(e) { /* trovevault failed — use hardcode as-is */ }
   }
   return { ok: true, matches: OFFICIAL_MATCHES };
 }
