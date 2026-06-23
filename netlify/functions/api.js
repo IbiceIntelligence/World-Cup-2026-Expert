@@ -368,7 +368,7 @@ async function getMatchAnalysis(home, away, lang = 'es') {
           sport: 'soccer', league: 'FIFA World Cup 2026',
           query: `${home} vs ${away}`, maxItems: 5,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 2b: Line movement — 40+ books
       Promise.race([
@@ -376,42 +376,42 @@ async function getMatchAnalysis(home, away, lang = 'es') {
           sport: 'soccer', league: 'FIFA World Cup 2026',
           query: `${home} vs ${away}`, maxItems: 5,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 3a: Injuries from ESPN
       Promise.race([
         runApifyActor('crawlerbros/espn-news', {
           query: `${home} ${away} injury lineup World Cup 2026`, maxItems: 3,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 3b: Confirmed squads
       Promise.race([
         runApifyActor('crawlerbros/espn-rosters-player-stats', {
           query: `${home} ${away} World Cup 2026`, maxItems: 5,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 3c: Market values from Transfermarkt
       Promise.race([
         runApifyActor('automation-lab/transfermarkt-scraper', {
           query: `${home} ${away} World Cup 2026`, maxItems: 5,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 5a: Polymarket crowd wisdom
       Promise.race([
         runApifyActor('scrapemint/polymarket-market-monitor', {
           query: `${home} ${away} World Cup 2026`, maxItems: 3,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
       // Layer 5b: Google News
       Promise.race([
         runApifyActor('george.the.developer/google-news-monitor', {
           query: `${home} vs ${away} World Cup 2026`, maxItems: 3,
         }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
       ]),
     ]);
 
@@ -453,7 +453,7 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   try {
     const ofRes = await Promise.race([
       fetchJSON('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 5000))
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
     ]);
     if (ofRes && ofRes.rounds) {
       const allMatches = ofRes.rounds.flatMap(r => r.matches || []);
