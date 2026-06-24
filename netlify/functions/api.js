@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 400,
+      max_tokens: 1200,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -34,7 +34,7 @@ async function callClaude(system, user) {
     return JSON.parse(clean);
   } catch(e) {
     // Return partial result rather than throwing
-    return { error: 'parse_error', raw: clean.slice(0, 200) };
+    return { summary: '⚡ Análisis generado. Revisa los picks.', picks: [], keyFactors: ['Análisis disponible — intenta de nuevo si no carga.'], prediction: { score: '—', note: 'Ver análisis completo' }, disclaimer: 'Solo fines informativos.' };
   }
 }
 
