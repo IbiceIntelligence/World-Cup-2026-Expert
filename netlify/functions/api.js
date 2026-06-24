@@ -277,8 +277,8 @@ async function runApifyActor(actorId, inputData) {
   const runId = runRes?.data?.id;
   if (!runId) throw new Error('No run ID');
   // Poll max 3 times (9 seconds)
-  for (let i = 0; i < 2; i++) {
-    await new Promise(r => setTimeout(r, 2000));
+  for (let i = 0; i < 3; i++) {
+    await new Promise(r => setTimeout(r, 3000));
     const st = await fetchJSON(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_API_TOKEN}`);
     if (st?.data?.status === 'SUCCEEDED') {
       const items = await fetchJSON(`https://api.apify.com/v2/datasets/${st.data.defaultDatasetId}/items?token=${APIFY_API_TOKEN}&limit=200`);
@@ -352,101 +352,8 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   }
 
   // 4. Fetch real data from Apify actors (parallel, with timeouts)
-  let oddsContext = 'Use your knowledge of current WC2026 market odds. Apply implied probability calculation.';
-  let injuryContext = 'Check for any known injuries or absences for both teams.';
-  let crowdContext = 'No Polymarket data available — use market consensus.';
-  let newsContext = 'No recent news available.';
-  let lineMovementContext = 'No line movement data available — assess based on market knowledge.';
-  let squadContext = 'No confirmed squad data available.';
-  let transferContext = 'No Transfermarkt data available.';
-
-  if (APIFY_API_TOKEN) {
-    const [oddsRes, lineRes, injuryRes, squadRes, transferRes, crowdRes, newsRes] = await Promise.allSettled([
-      // Layer 2a: Live odds
-      Promise.race([
-        runApifyActor('scrapemint/sports-odds-scraper', {
-          sport: 'soccer', league: 'FIFA World Cup 2026',
-          query: `${home} vs ${away}`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 2b: Line movement — 40+ books
-      Promise.race([
-        runApifyActor('scrapemint/sports-odds-movement-tracker', {
-          sport: 'soccer', league: 'FIFA World Cup 2026',
-          query: `${home} vs ${away}`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 3a: Injuries from ESPN
-      Promise.race([
-        runApifyActor('crawlerbros/espn-news', {
-          query: `${home} ${away} injury lineup World Cup 2026`, maxItems: 3,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 3b: Confirmed squads
-      Promise.race([
-        runApifyActor('crawlerbros/espn-rosters-player-stats', {
-          query: `${home} ${away} World Cup 2026`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 3c: Market values from Transfermarkt
-      Promise.race([
-        runApifyActor('automation-lab/transfermarkt-scraper', {
-          query: `${home} ${away} World Cup 2026`, maxItems: 5,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 5a: Polymarket crowd wisdom
-      Promise.race([
-        runApifyActor('scrapemint/polymarket-market-monitor', {
-          query: `${home} ${away} World Cup 2026`, maxItems: 3,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-      // Layer 5b: Google News
-      Promise.race([
-        runApifyActor('george.the.developer/google-news-monitor', {
-          query: `${home} vs ${away} World Cup 2026`, maxItems: 3,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
-      ]),
-    ]);
-
-    if (oddsRes.status === 'fulfilled' && Array.isArray(oddsRes.value) && oddsRes.value.length) {
-      oddsContext = oddsRes.value.slice(0,3).map(o =>
-        `${o.bookmaker||o.source||'Book'}: ${home} ${o.home||o.homeOdds||'?'} | Draw ${o.draw||o.drawOdds||'?'} | ${away} ${o.away||o.awayOdds||'?'}`
-      ).join(' | ');
-    }
-    if (lineRes.status === 'fulfilled' && Array.isArray(lineRes.value) && lineRes.value.length) {
-      lineMovementContext = lineRes.value.slice(0,3).map(l =>
-        `${l.market||l.bet||'Market'}: ${l.opening||l.open||'?'} -> ${l.current||l.close||'?'} (${l.movement||l.change||'?'}) ${l.sharp||l.steam ? '🔥 Sharp' : ''}`
-      ).filter(Boolean).join(' | ');
-    }
-    if (injuryRes.status === 'fulfilled' && Array.isArray(injuryRes.value) && injuryRes.value.length) {
-      injuryContext = injuryRes.value.slice(0,3).map(n => n.title || n.headline || '').filter(Boolean).join(' | ');
-    }
-    if (squadRes.status === 'fulfilled' && Array.isArray(squadRes.value) && squadRes.value.length) {
-      squadContext = squadRes.value.slice(0,5).map(p =>
-        `${p.name||p.player||'?'} (${p.team||'?'}): ${p.position||'?'} ${p.goals ? p.goals+'g' : ''} ${p.assists ? p.assists+'a' : ''}`.trim()
-      ).filter(Boolean).join(' | ');
-    }
-    if (transferRes.status === 'fulfilled' && Array.isArray(transferRes.value) && transferRes.value.length) {
-      transferContext = transferRes.value.slice(0,4).map(p =>
-        `${p.name||p.player||'?'} (${p.marketValue||p.value||'?'}): ${p.form||p.recentForm||'?'}`
-      ).filter(Boolean).join(' | ');
-    }
-    if (crowdRes.status === 'fulfilled' && Array.isArray(crowdRes.value) && crowdRes.value.length) {
-      crowdContext = crowdRes.value.slice(0,2).map(m =>
-        `${m.question||m.title||'Market'}: ${m.probability||m.yes_price||'?'}%`
-      ).join(' | ');
-    }
-    if (newsRes.status === 'fulfilled' && Array.isArray(newsRes.value) && newsRes.value.length) {
-      newsContext = newsRes.value.slice(0,3).map(n => n.title || n.headline || '').filter(Boolean).join(' | ');
-    }
-  }
+  // ── Claude uses its own WC2026 knowledge directly (no Apify actors) ──────
+  // Avoids Netlify 26s timeout. Claude has full knowledge of odds, injuries, squads, xG, H2H.
 
   // ── Layer 4: xG from OpenFootball (free, no auth) ───────────────────────
   let xgContext = 'No xG data available — use qualifying campaign averages as proxy.';
@@ -563,31 +470,15 @@ COMPETICIÓN: ${stage}
 ESTADO: ${matchStatus} | ${scoreCtx}
 SEDE: ${venue}
 TABLA GRUPO ${groupLetter}: ${standingsStr}
-ODDS EN MERCADO: ${oddsContext}
-MOVIMIENTO DE LINEAS: ${lineMovementContext}
-LESIONES/BAJAS: ${injuryContext}
-SQUADS CONFIRMADOS: ${squadContext}
-VALORES Y FORMA (Transfermarkt): ${transferContext}
-XG / DATOS REALES (OpenFootball): ${xgContext}
-CROWD WISDOM (Polymarket): ${crowdContext}
-NOTICIAS RECIENTES: ${newsContext}
 
-Genera el análisis completo aplicando el framework worldcup-betting-expert: VALUE BET detection, modelo xG, H2H, señales sharp money, crowd wisdom de Polymarket. JSON únicamente.`
+Usa tu conocimiento completo del Mundial 2026 para generar el análisis: odds actuales del mercado, lesiones confirmadas, squads, xG de clasificatoria, H2H, movimiento de líneas y crowd wisdom. Aplica el framework worldcup-betting-expert completo. JSON únicamente.`
     : `MATCH: ${home} vs ${away}
 COMPETITION: ${stage}
 STATUS: ${matchStatus} | ${scoreCtx}
 VENUE: ${venue}
 GROUP ${groupLetter} TABLE: ${standingsStr}
-MARKET ODDS: ${oddsContext}
-LINE MOVEMENT: ${lineMovementContext}
-INJURIES/ABSENCES: ${injuryContext}
-CONFIRMED SQUADS: ${squadContext}
-MARKET VALUES & FORM (Transfermarkt): ${transferContext}
-XG / REAL MATCH DATA (OpenFootball): ${xgContext}
-CROWD WISDOM (Polymarket): ${crowdContext}
-RECENT NEWS: ${newsContext}
 
-Generate full analysis applying worldcup-betting-expert framework: VALUE BET detection, xG model, H2H, sharp money signals, Polymarket crowd wisdom. JSON only.`;
+Use your comprehensive WC2026 knowledge for the analysis: current market odds, confirmed injuries, squads, qualifying xG, H2H, line movement and crowd wisdom. Apply the full worldcup-betting-expert framework. JSON only.`;
 
   try {
     const result = await callClaude(system, user);
