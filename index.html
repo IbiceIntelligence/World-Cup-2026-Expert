@@ -2020,7 +2020,7 @@ async function loadLiveData() {
 
 // Boot after DOM ready
 loadLiveData();
-
+localStorage.setItem('wc26_dev_access','ibice2026');
 // Auto-refresh — 20s when live matches, 60s otherwise
 function scheduleRefresh() {
   const hasLive = allMatchesCache.some(m => m.status === 'live');
