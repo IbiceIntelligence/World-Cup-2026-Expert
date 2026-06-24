@@ -14,7 +14,7 @@ async function callClaude(system, user) {
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 800,
+      max_tokens: 2048,
       system,
       messages: [{ role: 'user', content: user }],
     }),
@@ -99,45 +99,45 @@ let OFFICIAL_MATCHES = [
   { id:'m15', isoDate:'2026-06-15', home:{name:'Saudi Arabia'},  away:{name:'Uruguay'},                   date:'06/15/2026 18:00', display:'Jun 15 · 18:00', group:'H', status:'finished', homeScore:1,  awayScore:1 },
   { id:'m16', isoDate:'2026-06-15', home:{name:'Iran'},          away:{name:'New Zealand'},               date:'06/15/2026 21:00', display:'Jun 15 · 21:00', group:'G', status:'finished', homeScore:2,  awayScore:2 },
   // ── JUN 16 ──
-  { id:'m17', isoDate:'2026-06-16', home:{name:'France'},        away:{name:'Senegal'},                   date:'06/16/2026 15:00', display:'Jun 16 · 15:00', group:'I', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m18', isoDate:'2026-06-16', home:{name:'Iraq'},          away:{name:'Norway'},                    date:'06/16/2026 18:00', display:'Jun 16 · 18:00', group:'I', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m19', isoDate:'2026-06-16', home:{name:'Argentina'},     away:{name:'Algeria'},                   date:'06/16/2026 21:00', display:'Jun 16 · 21:00', group:'J', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m17', isoDate:'2026-06-16', home:{name:'France'},        away:{name:'Senegal'},                   date:'06/16/2026 15:00', display:'Jun 16 · 15:00', group:'I', status:'finished', homeScore:2, awayScore:1 },
+  { id:'m18', isoDate:'2026-06-16', home:{name:'Iraq'},          away:{name:'Norway'},                    date:'06/16/2026 18:00', display:'Jun 16 · 18:00', group:'I', status:'finished', homeScore:0, awayScore:3 },
+  { id:'m19', isoDate:'2026-06-16', home:{name:'Argentina'},     away:{name:'Algeria'},                   date:'06/16/2026 21:00', display:'Jun 16 · 21:00', group:'J', status:'finished', homeScore:3, awayScore:0 },
   // ── JUN 17 ──
-  { id:'m20', isoDate:'2026-06-17', home:{name:'Austria'},       away:{name:'Jordan'},                    date:'06/17/2026 00:00', display:'Jun 17 · 00:00', group:'J', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m21', isoDate:'2026-06-17', home:{name:'Portugal'},      away:{name:'Democratic Republic of the Congo'}, date:'06/17/2026 13:00', display:'Jun 17 · 13:00', group:'K', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m22', isoDate:'2026-06-17', home:{name:'England'},       away:{name:'Croatia'},                   date:'06/17/2026 16:00', display:'Jun 17 · 16:00', group:'L', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m23', isoDate:'2026-06-17', home:{name:'Ghana'},         away:{name:'Panama'},                    date:'06/17/2026 19:00', display:'Jun 17 · 19:00', group:'L', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m24', isoDate:'2026-06-17', home:{name:'Uzbekistan'},    away:{name:'Colombia'},                  date:'06/17/2026 22:00', display:'Jun 17 · 22:00', group:'K', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m20', isoDate:'2026-06-17', home:{name:'Austria'},       away:{name:'Jordan'},                    date:'06/17/2026 00:00', display:'Jun 17 · 00:00', group:'J', status:'finished', homeScore:3, awayScore:1 },
+  { id:'m21', isoDate:'2026-06-17', home:{name:'Portugal'},      away:{name:'Democratic Republic of the Congo'}, date:'06/17/2026 13:00', display:'Jun 17 · 13:00', group:'K', status:'finished', homeScore:1, awayScore:1 },
+  { id:'m22', isoDate:'2026-06-17', home:{name:'England'},       away:{name:'Croatia'},                   date:'06/17/2026 16:00', display:'Jun 17 · 16:00', group:'L', status:'finished', homeScore:4, awayScore:2 },
+  { id:'m23', isoDate:'2026-06-17', home:{name:'Ghana'},         away:{name:'Panama'},                    date:'06/17/2026 19:00', display:'Jun 17 · 19:00', group:'L', status:'finished', homeScore:1, awayScore:0 },
+  { id:'m24', isoDate:'2026-06-17', home:{name:'Uzbekistan'},    away:{name:'Colombia'},                  date:'06/17/2026 22:00', display:'Jun 17 · 22:00', group:'K', status:'finished', homeScore:1, awayScore:3 },
   // ── JUN 18 ──
-  { id:'m25', isoDate:'2026-06-18', home:{name:'Czech Republic'},away:{name:'South Africa'},              date:'06/18/2026 12:00', display:'Jun 18 · 12:00', group:'A', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m26', isoDate:'2026-06-18', home:{name:'Switzerland'},   away:{name:'Bosnia and Herzegovina'},    date:'06/18/2026 15:00', display:'Jun 18 · 15:00', group:'B', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m27', isoDate:'2026-06-18', home:{name:'Canada'},        away:{name:'Qatar'},                     date:'06/18/2026 18:00', display:'Jun 18 · 18:00', group:'B', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m28', isoDate:'2026-06-18', home:{name:'Mexico'},        away:{name:'South Korea'},               date:'06/18/2026 22:00', display:'Jun 18 · 22:00', group:'A', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m25', isoDate:'2026-06-18', home:{name:'Czech Republic'},away:{name:'South Africa'},              date:'06/18/2026 12:00', display:'Jun 18 · 12:00', group:'A', status:'finished', homeScore:1, awayScore:1 },
+  { id:'m26', isoDate:'2026-06-18', home:{name:'Switzerland'},   away:{name:'Bosnia and Herzegovina'},    date:'06/18/2026 15:00', display:'Jun 18 · 15:00', group:'B', status:'finished', homeScore:4, awayScore:1 },
+  { id:'m27', isoDate:'2026-06-18', home:{name:'Canada'},        away:{name:'Qatar'},                     date:'06/18/2026 18:00', display:'Jun 18 · 18:00', group:'B', status:'finished', homeScore:6, awayScore:0 },
+  { id:'m28', isoDate:'2026-06-18', home:{name:'Mexico'},        away:{name:'South Korea'},               date:'06/18/2026 22:00', display:'Jun 18 · 22:00', group:'A', status:'finished', homeScore:1, awayScore:0 },
   // ── JUN 19 ──
-  { id:'m29', isoDate:'2026-06-19', home:{name:'United States'}, away:{name:'Australia'},                 date:'06/19/2026 15:00', display:'Jun 19 · 15:00', group:'D', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m30', isoDate:'2026-06-19', home:{name:'Scotland'},      away:{name:'Morocco'},                   date:'06/19/2026 18:00', display:'Jun 19 · 18:00', group:'C', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m31', isoDate:'2026-06-19', home:{name:'Brazil'},        away:{name:'Haiti'},                     date:'06/19/2026 21:00', display:'Jun 19 · 21:00', group:'C', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m29', isoDate:'2026-06-19', home:{name:'United States'}, away:{name:'Australia'},                 date:'06/19/2026 15:00', display:'Jun 19 · 15:00', group:'D', status:'finished', homeScore:2, awayScore:0 },
+  { id:'m30', isoDate:'2026-06-19', home:{name:'Scotland'},      away:{name:'Morocco'},                   date:'06/19/2026 18:00', display:'Jun 19 · 18:00', group:'C', status:'finished', homeScore:0, awayScore:1 },
+  { id:'m31', isoDate:'2026-06-19', home:{name:'Brazil'},        away:{name:'Haiti'},                     date:'06/19/2026 21:00', display:'Jun 19 · 21:00', group:'C', status:'finished', homeScore:3, awayScore:0 },
   // ── JUN 20 ──
-  { id:'m32', isoDate:'2026-06-20', home:{name:'Turkey'},        away:{name:'Paraguay'},                  date:'06/20/2026 00:00', display:'Jun 20 · 00:00', group:'D', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m33', isoDate:'2026-06-20', home:{name:'Netherlands'},   away:{name:'Sweden'},                    date:'06/20/2026 13:00', display:'Jun 20 · 13:00', group:'F', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m34', isoDate:'2026-06-20', home:{name:'Germany'},       away:{name:'Ivory Coast'},               date:'06/20/2026 16:00', display:'Jun 20 · 16:00', group:'E', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m35', isoDate:'2026-06-20', home:{name:'Ecuador'},       away:{name:'Curaçao'},                   date:'06/20/2026 20:00', display:'Jun 20 · 20:00', group:'E', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m32', isoDate:'2026-06-20', home:{name:'Turkey'},        away:{name:'Paraguay'},                  date:'06/20/2026 00:00', display:'Jun 20 · 00:00', group:'D', status:'finished', homeScore:0, awayScore:1 },
+  { id:'m33', isoDate:'2026-06-20', home:{name:'Netherlands'},   away:{name:'Sweden'},                    date:'06/20/2026 13:00', display:'Jun 20 · 13:00', group:'F', status:'finished', homeScore:5, awayScore:1 },
+  { id:'m34', isoDate:'2026-06-20', home:{name:'Germany'},       away:{name:'Ivory Coast'},               date:'06/20/2026 16:00', display:'Jun 20 · 16:00', group:'E', status:'finished', homeScore:2, awayScore:1 },
+  { id:'m35', isoDate:'2026-06-20', home:{name:'Ecuador'},       away:{name:'Curaçao'},                   date:'06/20/2026 20:00', display:'Jun 20 · 20:00', group:'E', status:'finished', homeScore:0, awayScore:0 },
   // ── JUN 21 ──
-  { id:'m36', isoDate:'2026-06-21', home:{name:'Tunisia'},       away:{name:'Japan'},                     date:'06/21/2026 00:00', display:'Jun 21 · 00:00', group:'F', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m37', isoDate:'2026-06-21', home:{name:'Spain'},         away:{name:'Saudi Arabia'},              date:'06/21/2026 12:00', display:'Jun 21 · 12:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m38', isoDate:'2026-06-21', home:{name:'Belgium'},       away:{name:'Iran'},                      date:'06/21/2026 15:00', display:'Jun 21 · 15:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m39', isoDate:'2026-06-21', home:{name:'Uruguay'},       away:{name:'Cape Verde'},                date:'06/21/2026 18:00', display:'Jun 21 · 18:00', group:'H', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m40', isoDate:'2026-06-21', home:{name:'New Zealand'},   away:{name:'Egypt'},                     date:'06/21/2026 21:00', display:'Jun 21 · 21:00', group:'G', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m36', isoDate:'2026-06-21', home:{name:'Tunisia'},       away:{name:'Japan'},                     date:'06/21/2026 00:00', display:'Jun 21 · 00:00', group:'F', status:'finished', homeScore:0, awayScore:4 },
+  { id:'m37', isoDate:'2026-06-21', home:{name:'Spain'},         away:{name:'Saudi Arabia'},              date:'06/21/2026 12:00', display:'Jun 21 · 12:00', group:'H', status:'finished', homeScore:3, awayScore:1 },
+  { id:'m38', isoDate:'2026-06-21', home:{name:'Belgium'},       away:{name:'Iran'},                      date:'06/21/2026 15:00', display:'Jun 21 · 15:00', group:'G', status:'finished', homeScore:2, awayScore:0 },
+  { id:'m39', isoDate:'2026-06-21', home:{name:'Uruguay'},       away:{name:'Cape Verde'},                date:'06/21/2026 18:00', display:'Jun 21 · 18:00', group:'H', status:'finished', homeScore:2, awayScore:1 },
+  { id:'m40', isoDate:'2026-06-21', home:{name:'New Zealand'},   away:{name:'Egypt'},                     date:'06/21/2026 21:00', display:'Jun 21 · 21:00', group:'G', status:'finished', homeScore:1, awayScore:1 },
   // ── JUN 22 ──
-  { id:'m41', isoDate:'2026-06-22', home:{name:'Argentina'},     away:{name:'Austria'},                   date:'06/22/2026 13:00', display:'Jun 22 · 13:00 ET', group:'J', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m42', isoDate:'2026-06-22', home:{name:'Algeria'},       away:{name:'Jordan'},                    date:'06/22/2026 16:00', display:'Jun 22 · 16:00 ET', group:'J', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m43', isoDate:'2026-06-22', home:{name:'France'},        away:{name:'Iraq'},                      date:'06/22/2026 20:00', display:'Jun 22 · 20:00 ET', group:'I', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m44', isoDate:'2026-06-22', home:{name:'Norway'},        away:{name:'Senegal'},                   date:'06/22/2026 23:00', display:'Jun 22 · 23:00 ET', group:'I', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m41', isoDate:'2026-06-22', home:{name:'Argentina'},     away:{name:'Austria'},                   date:'06/22/2026 13:00', display:'Jun 22 · 13:00 ET', group:'J', status:'finished', homeScore:2, awayScore:0 },
+  { id:'m42', isoDate:'2026-06-22', home:{name:'Algeria'},       away:{name:'Jordan'},                    date:'06/22/2026 16:00', display:'Jun 22 · 16:00 ET', group:'J', status:'finished', homeScore:2, awayScore:1 },
+  { id:'m43', isoDate:'2026-06-22', home:{name:'France'},        away:{name:'Iraq'},                      date:'06/22/2026 20:00', display:'Jun 22 · 20:00 ET', group:'I', status:'finished', homeScore:4, awayScore:0 },
+  { id:'m44', isoDate:'2026-06-22', home:{name:'Norway'},        away:{name:'Senegal'},                   date:'06/22/2026 23:00', display:'Jun 22 · 23:00 ET', group:'I', status:'finished', homeScore:2, awayScore:1 },
   // ── JUN 23 ──
   { id:'m45', isoDate:'2026-06-23', home:{name:'Portugal'},      away:{name:'Uzbekistan'},                date:'06/23/2026 13:00', display:'Jun 23 · 13:00 ET', group:'K', status:'finished', homeScore:5,  awayScore:0 },
   { id:'m46', isoDate:'2026-06-23', home:{name:'England'},       away:{name:'Ghana'},                     date:'06/23/2026 16:00', display:'Jun 23 · 16:00 ET', group:'L', status:'finished', homeScore:0, awayScore:0 },
   { id:'m47', isoDate:'2026-06-23', home:{name:'Panama'},        away:{name:'Croatia'},                   date:'06/23/2026 19:00', display:'Jun 23 · 19:00 ET', group:'L', status:'finished', homeScore:0, awayScore:1 },
-  { id:'m48', isoDate:'2026-06-23', home:{name:'Colombia'},      away:{name:'Democratic Republic of the Congo'}, date:'06/23/2026 22:00', display:'Jun 23 · 22:00 ET', group:'K', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m48', isoDate:'2026-06-23', home:{name:'Colombia'},      away:{name:'Democratic Republic of the Congo'}, date:'06/23/2026 22:00', display:'Jun 23 · 22:00 ET', group:'K', status:'finished', homeScore:1, awayScore:1 },
   // ── JUN 24 ──
   { id:'m49', isoDate:'2026-06-24', home:{name:'Czech Republic'},away:{name:'Mexico'},                    date:'06/24/2026 13:00', display:'Jun 24 · 13:00 ET', group:'A', status:'scheduled', homeScore:null, awayScore:null },
   { id:'m50', isoDate:'2026-06-24', home:{name:'South Africa'},  away:{name:'South Korea'},               date:'06/24/2026 13:00', display:'Jun 24 · 13:00 ET', group:'A', status:'scheduled', homeScore:null, awayScore:null },
@@ -332,7 +332,7 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   try {
     const ofRes = await Promise.race([
       fetchJSON('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1000))
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
     ]);
     if (ofRes && ofRes.rounds) {
       const allMatches = ofRes.rounds.flatMap(r => r.matches || []);
