@@ -294,64 +294,36 @@ async function runApifyActor(actorId, inputData) {
 async function getMatchAnalysis(home, away, lang = 'es') {
   const isES = lang !== 'en';
 
-  // ── Layer 1: Live match context from trovevault ──────────────────────────
-  let match = null;
-  let groupLetter = '';
-  let standingsStr = 'Group standings not available.';
-  let matchVenue = 'World Cup 2026 venue';
+  // ── Match context from OFFICIAL_MATCHES hardcode ─────────────────────────
+  const matchData = OFFICIAL_MATCHES.find(m => m.home.name === home && m.away.name === away);
+  const groupLetter = matchData ? matchData.group || '' : '';
+  const matchVenue = matchData ? matchData.venue || 'World Cup 2026 venue' : 'World Cup 2026 venue';
+  const match = matchData || null;
 
-  try {
-    if (APIFY_API_TOKEN) {
-      const liveFixtures = await Promise.race([
-        runApifyActor('trovevault/world-cup-results-tables', {
-          year: '2026', stage: 'all', includeMatches: true,
-          includeGroupTables: true, maxMatches: 104,
-        }),
-        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
-      ]);
-      if (Array.isArray(liveFixtures) && liveFixtures.length > 0) {
-        const liveMatch = liveFixtures.find(m =>
-          (m.homeTeam === home || m.home_team === home) &&
-          (m.awayTeam === away || m.away_team === away)
-        );
-        if (liveMatch) {
-          groupLetter = (liveMatch.group || '').replace('Group ', '');
-          matchVenue = liveMatch.venue || matchVenue;
-          match = {
-            status: liveMatch.status || 'scheduled',
-            homeScore: liveMatch.homeScore != null ? liveMatch.homeScore : null,
-            awayScore: liveMatch.awayScore != null ? liveMatch.awayScore : null,
-            minute: liveMatch.minute || null,
-            group: groupLetter,
-          };
-        }
-        const gs = {};
-        liveFixtures.filter(m => (m.group||'').replace('Group ','') === groupLetter && (m.status==='finished'||m.status==='live'))
-          .forEach(m => {
-            const h = m.homeTeam||m.home_team||''; const a = m.awayTeam||m.away_team||'';
-            if (!gs[h]) gs[h]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
-            if (!gs[a]) gs[a]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
-            const hs=parseInt(m.homeScore||0), as2=parseInt(m.awayScore||0);
-            gs[h].p++; gs[h].gf+=hs; gs[h].ga+=as2;
-            gs[a].p++; gs[a].gf+=as2; gs[a].ga+=hs;
-            if(hs>as2){gs[h].w++;gs[h].pts+=3;gs[a].l++;}
-            else if(hs<as2){gs[a].w++;gs[a].pts+=3;gs[h].l++;}
-            else{gs[h].d++;gs[h].pts+=1;gs[a].d++;gs[a].pts+=1;}
-          });
-        if (Object.keys(gs).length > 0) {
-          standingsStr = Object.entries(gs)
-            .sort((a,b)=>b[1].pts-a[1].pts)
-            .map(([t,s])=>`${t}: ${s.pts}pts ${s.p}PJ ${s.w}W ${s.d}D ${s.l}L ${s.gf}-${s.ga}`)
-            .join(' | ');
-        }
-      }
+  // Calculate group standings from OFFICIAL_MATCHES
+  let standingsStr = 'Group standings not available.';
+  if (groupLetter) {
+    const gs = {};
+    OFFICIAL_MATCHES.filter(m => m.group === groupLetter && (m.status==='finished'||m.status==='live'))
+      .forEach(m => {
+        const h = m.home.name; const a = m.away.name;
+        if (!gs[h]) gs[h]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
+        if (!gs[a]) gs[a]={p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0};
+        const hs=parseInt(m.homeScore||0), as2=parseInt(m.awayScore||0);
+        gs[h].p++; gs[h].gf+=hs; gs[h].ga+=as2;
+        gs[a].p++; gs[a].gf+=as2; gs[a].ga+=hs;
+        if(hs>as2){gs[h].w++;gs[h].pts+=3;gs[a].l++;}
+        else if(hs<as2){gs[a].w++;gs[a].pts+=3;gs[h].l++;}
+        else{gs[h].d++;gs[h].pts+=1;gs[a].d++;gs[a].pts+=1;}
+      });
+    if (Object.keys(gs).length > 0) {
+      standingsStr = Object.entries(gs)
+        .sort((a,b)=>b[1].pts-a[1].pts)
+        .map(([t,s])=>`${t}: ${s.pts}pts ${s.p}PJ ${s.w}W ${s.d}D ${s.l}L ${s.gf}-${s.ga}`)
+        .join(' | ');
     }
-  } catch(e) {
-    const fallback = OFFICIAL_MATCHES.find(m => m.home.name === home && m.away.name === away);
-    if (fallback) { match = fallback; groupLetter = fallback.group || ''; matchVenue = fallback.venue || matchVenue; }
   }
 
-  // 4. Fetch real data from Apify actors (parallel, with timeouts)
   // ── Claude uses its own WC2026 knowledge directly (no Apify actors) ──────
   // Avoids Netlify 26s timeout. Claude has full knowledge of odds, injuries, squads, xG, H2H.
 
