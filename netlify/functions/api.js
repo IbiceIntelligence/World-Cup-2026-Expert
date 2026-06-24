@@ -332,7 +332,7 @@ async function getMatchAnalysis(home, away, lang = 'es') {
   try {
     const ofRes = await Promise.race([
       fetchJSON('https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'),
-      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000))
+      new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 1000))
     ]);
     if (ofRes && ofRes.rounds) {
       const allMatches = ofRes.rounds.flatMap(r => r.matches || []);
