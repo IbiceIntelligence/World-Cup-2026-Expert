@@ -135,8 +135,8 @@ let OFFICIAL_MATCHES = [
   { id:'m44', isoDate:'2026-06-22', home:{name:'Norway'},        away:{name:'Senegal'},                   date:'06/22/2026 23:00', display:'Jun 22 · 23:00 ET', group:'I', status:'scheduled', homeScore:null, awayScore:null },
   // ── JUN 23 ──
   { id:'m45', isoDate:'2026-06-23', home:{name:'Portugal'},      away:{name:'Uzbekistan'},                date:'06/23/2026 13:00', display:'Jun 23 · 13:00 ET', group:'K', status:'finished', homeScore:5,  awayScore:0 },
-  { id:'m46', isoDate:'2026-06-23', home:{name:'England'},       away:{name:'Ghana'},                     date:'06/23/2026 16:00', display:'Jun 23 · 16:00 ET', group:'L', status:'scheduled', homeScore:null, awayScore:null },
-  { id:'m47', isoDate:'2026-06-23', home:{name:'Panama'},        away:{name:'Croatia'},                   date:'06/23/2026 19:00', display:'Jun 23 · 19:00 ET', group:'L', status:'scheduled', homeScore:null, awayScore:null },
+  { id:'m46', isoDate:'2026-06-23', home:{name:'England'},       away:{name:'Ghana'},                     date:'06/23/2026 16:00', display:'Jun 23 · 16:00 ET', group:'L', status:'finished', homeScore:0, awayScore:0 },
+  { id:'m47', isoDate:'2026-06-23', home:{name:'Panama'},        away:{name:'Croatia'},                   date:'06/23/2026 19:00', display:'Jun 23 · 19:00 ET', group:'L', status:'finished', homeScore:0, awayScore:1 },
   { id:'m48', isoDate:'2026-06-23', home:{name:'Colombia'},      away:{name:'Democratic Republic of the Congo'}, date:'06/23/2026 22:00', display:'Jun 23 · 22:00 ET', group:'K', status:'scheduled', homeScore:null, awayScore:null },
   // ── JUN 24 ──
   { id:'m49', isoDate:'2026-06-24', home:{name:'Czech Republic'},away:{name:'Mexico'},                    date:'06/24/2026 13:00', display:'Jun 24 · 13:00 ET', group:'A', status:'scheduled', homeScore:null, awayScore:null },
