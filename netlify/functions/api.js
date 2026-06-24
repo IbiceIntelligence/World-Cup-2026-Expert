@@ -277,8 +277,8 @@ async function runApifyActor(actorId, inputData) {
   const runId = runRes?.data?.id;
   if (!runId) throw new Error('No run ID');
   // Poll max 3 times (9 seconds)
-  for (let i = 0; i < 3; i++) {
-    await new Promise(r => setTimeout(r, 3000));
+  for (let i = 0; i < 1; i++) {
+    await new Promise(r => setTimeout(r, 2000));
     const st = await fetchJSON(`https://api.apify.com/v2/actor-runs/${runId}?token=${APIFY_API_TOKEN}`);
     if (st?.data?.status === 'SUCCEEDED') {
       const items = await fetchJSON(`https://api.apify.com/v2/datasets/${st.data.defaultDatasetId}/items?token=${APIFY_API_TOKEN}&limit=200`);
